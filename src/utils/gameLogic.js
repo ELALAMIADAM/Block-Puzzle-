@@ -63,7 +63,7 @@ export function generateRandomBlocks() {
   return blocks;
 }
 
-export function canPlaceBlock(grid, blockShape, startRow, startCol) {
+export function canPlaceBlock(grid, blockShape, startRow, startCol, difficulty = 'normal') {
   const gridSize = grid.length;
   
   for (let row = 0; row < blockShape.length; row++) {
@@ -81,6 +81,13 @@ export function canPlaceBlock(grid, blockShape, startRow, startCol) {
         if (grid[gridRow][gridCol]) {
           return false;
         }
+        
+        // Check if trying to place in blocked center square (hard mode)
+        if (difficulty === 'hard' && 
+            gridRow >= 3 && gridRow <= 5 && 
+            gridCol >= 3 && gridCol <= 5) {
+          return false;
+        }
       }
     }
   }
@@ -88,14 +95,14 @@ export function canPlaceBlock(grid, blockShape, startRow, startCol) {
   return true;
 }
 
-export function checkGameOver(grid, availableBlocks) {
+export function checkGameOver(grid, availableBlocks, difficulty = 'normal') {
   const gridSize = grid.length;
   
   // Check if any block can be placed anywhere on the grid
   for (const block of availableBlocks) {
     for (let row = 0; row < gridSize; row++) {
       for (let col = 0; col < gridSize; col++) {
-        if (canPlaceBlock(grid, block, row, col)) {
+        if (canPlaceBlock(grid, block, row, col, difficulty)) {
           return false; // Game can continue
         }
       }

@@ -35,7 +35,7 @@ function App() {
   // Check for game over when blocks change
   useEffect(() => {
     if (availableBlocks.length > 0) {
-      const isGameOver = checkGameOver(grid, availableBlocks);
+      const isGameOver = checkGameOver(grid, availableBlocks, difficulty);
       if (isGameOver) {
         setGameOver(true);
         if (score > bestScore) {
@@ -44,7 +44,7 @@ function App() {
         }
       }
     }
-  }, [grid, availableBlocks, score, bestScore]);
+  }, [grid, availableBlocks, score, bestScore, difficulty]);
 
   const resetGame = useCallback(() => {
     const newGrid = Array(GRID_SIZE).fill(null).map(() => Array(GRID_SIZE).fill(false));
@@ -67,24 +67,66 @@ function App() {
     
     // Check rows
     for (let row = 0; row < GRID_SIZE; row++) {
-      if (gridCopy[row].every(cell => cell)) {
+      let isRowComplete = true;
+      
+      // Check if all non-blocked cells in the row are filled
+      for (let col = 0; col < GRID_SIZE; col++) {
+        const isBlocked = difficulty === 'hard' && 
+                         row >= 3 && row <= 5 && 
+                         col >= 3 && col <= 5;
+        
+        // Only check non-blocked cells
+        if (!isBlocked && !gridCopy[row][col]) {
+          isRowComplete = false;
+          break;
+        }
+      }
+      
+      if (isRowComplete) {
         rowsCleared++;
         totalCleared++;
-        // Clear the row (including blocked center in hard mode)
+        // Clear only the non-blocked cells in the row
         for (let col = 0; col < GRID_SIZE; col++) {
-          gridCopy[row][col] = false;
+          const isBlocked = difficulty === 'hard' && 
+                           row >= 3 && row <= 5 && 
+                           col >= 3 && col <= 5;
+          
+          if (!isBlocked) {
+            gridCopy[row][col] = false;
+          }
         }
       }
     }
     
     // Check columns
     for (let col = 0; col < GRID_SIZE; col++) {
-      if (gridCopy.every(row => row[col])) {
+      let isColComplete = true;
+      
+      // Check if all non-blocked cells in the column are filled
+      for (let row = 0; row < GRID_SIZE; row++) {
+        const isBlocked = difficulty === 'hard' && 
+                         row >= 3 && row <= 5 && 
+                         col >= 3 && col <= 5;
+        
+        // Only check non-blocked cells
+        if (!isBlocked && !gridCopy[row][col]) {
+          isColComplete = false;
+          break;
+        }
+      }
+      
+      if (isColComplete) {
         colsCleared++;
         totalCleared++;
-        // Clear the column (including blocked center in hard mode)
+        // Clear only the non-blocked cells in the column
         for (let row = 0; row < GRID_SIZE; row++) {
-          gridCopy[row][col] = false;
+          const isBlocked = difficulty === 'hard' && 
+                           row >= 3 && row <= 5 && 
+                           col >= 3 && col <= 5;
+          
+          if (!isBlocked) {
+            gridCopy[row][col] = false;
+          }
         }
       }
     }
