@@ -5,6 +5,7 @@ import GameBoard from './components/GameBoard';
 import BlockTray from './components/BlockTray';
 import ScoreDisplay from './components/ScoreDisplay';
 import GameOverModal from './components/GameOverModal';
+import CustomDragLayer from './components/CustomDragLayer';
 import { generateRandomBlocks, checkGameOver } from './utils/gameLogic';
 
 const GRID_SIZE = 9;
@@ -168,11 +169,8 @@ function App() {
     <DndProvider backend={HTML5Backend}>
       <div className="game-container">
         <h1 style={{ color: 'white', fontSize: '36px', margin: '0 0 30px 0', textAlign: 'center' }}>
-          🌳 Wood Block Puzzle 9x9
+          Wood Block Puzzle
         </h1>
-        <p style={{ color: 'white', textAlign: 'center', margin: '0 0 20px 0', opacity: 0.9 }}>
-          Fill rows, columns, or 3×3 squares to clear them!
-        </p>
         
         <ScoreDisplay 
           score={score} 
@@ -180,18 +178,22 @@ function App() {
           linesCleared={linesCleared}
         />
         
-        <GameBoard 
-          grid={grid} 
-          onBlockPlace={placeBlock}
-          availableBlocks={availableBlocks}
-          isPaused={isPaused}
-        />
-        
-        <BlockTray 
-          blocks={availableBlocks} 
-          onBlockPlace={placeBlock}
-          disabled={isPaused || gameOver}
-        />
+        <div className="game-main">
+          <div className="game-board-container">
+            <GameBoard 
+              grid={grid} 
+              onBlockPlace={placeBlock}
+              availableBlocks={availableBlocks}
+              isPaused={isPaused}
+            />
+          </div>
+          
+          <BlockTray 
+            blocks={availableBlocks} 
+            onBlockPlace={placeBlock}
+            disabled={isPaused || gameOver}
+          />
+        </div>
         
         <div className="controls">
           <button 
@@ -215,6 +217,7 @@ function App() {
           />
         )}
       </div>
+      <CustomDragLayer />
     </DndProvider>
   );
 }

@@ -14,10 +14,14 @@ function GameBoard({ grid, onBlockPlace, availableBlocks, isPaused }) {
       const dropPosition = getDropPosition(clientOffset);
       
       if (dropPosition) {
+        // Calculate the actual placement position based on the dragged cell
+        const actualRow = dropPosition.row - (item.dragCellRow || 0);
+        const actualCol = dropPosition.col - (item.dragCellCol || 0);
+        
         const success = onBlockPlace(
           item.shape, 
-          dropPosition.row, 
-          dropPosition.col, 
+          actualRow, 
+          actualCol, 
           item.index
         );
         if (success) {
@@ -30,9 +34,18 @@ function GameBoard({ grid, onBlockPlace, availableBlocks, isPaused }) {
       const clientOffset = monitor.getClientOffset();
       const dropPosition = getDropPosition(clientOffset);
       
-      if (dropPosition && canPlaceBlock(item.shape, dropPosition.row, dropPosition.col)) {
-        setDragPreview(item.shape);
-        setPreviewPosition(dropPosition);
+      if (dropPosition) {
+        // Calculate the actual placement position based on the dragged cell
+        const actualRow = dropPosition.row - (item.dragCellRow || 0);
+        const actualCol = dropPosition.col - (item.dragCellCol || 0);
+        
+        if (canPlaceBlock(item.shape, actualRow, actualCol)) {
+          setDragPreview(item.shape);
+          setPreviewPosition({ row: actualRow, col: actualCol });
+        } else {
+          setDragPreview(null);
+          setPreviewPosition({ row: -1, col: -1 });
+        }
       } else {
         setDragPreview(null);
         setPreviewPosition({ row: -1, col: -1 });

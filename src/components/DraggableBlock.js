@@ -1,18 +1,10 @@
 import React from 'react';
-import { useDrag } from 'react-dnd';
+import DraggableBlockCell from './DraggableBlockCell';
 
 function DraggableBlock({ shape, index, disabled }) {
-  const [{ isDragging }, drag] = useDrag({
-    type: 'block',
-    item: { shape, index },
-    canDrag: !disabled,
-    collect: (monitor) => ({
-      isDragging: !!monitor.isDragging(),
-    }),
-  });
-
   const renderBlock = () => {
     const maxCols = Math.max(...shape.map(row => row.length));
+    let cellIndex = 0;
     
     return (
       <div 
@@ -22,27 +14,31 @@ function DraggableBlock({ shape, index, disabled }) {
           gridTemplateRows: `repeat(${shape.length}, 1fr)`
         }}
       >
-        {shape.flat().map((cell, cellIndex) => (
-          <div
-            key={cellIndex}
-            className={`block-cell ${cell ? 'filled' : 'empty'}`}
-            style={{ 
-              opacity: cell ? 1 : 0,
-              visibility: cell ? 'visible' : 'hidden'
-            }}
-          />
-        ))}
+        {shape.map((row, rowIndex) =>
+          row.map((cell, colIndex) => {
+            const currentCellIndex = cellIndex++;
+            return (
+              <DraggableBlockCell
+                key={`${rowIndex}-${colIndex}`}
+                shape={shape}
+                blockIndex={index}
+                cellRow={rowIndex}
+                cellCol={colIndex}
+                isVisible={cell}
+                disabled={disabled}
+              />
+            );
+          })
+        )}
       </div>
     );
   };
 
   return (
     <div
-      ref={drag}
-      className={`block-container ${isDragging ? 'dragging' : ''} ${disabled ? 'disabled' : ''}`}
+      className={`block-container ${disabled ? 'disabled' : ''}`}
       style={{
-        opacity: disabled ? 0.5 : (isDragging ? 0.7 : 1),
-        cursor: disabled ? 'not-allowed' : (isDragging ? 'grabbing' : 'grab'),
+        opacity: disabled ? 0.5 : 1,
       }}
     >
       {renderBlock()}
