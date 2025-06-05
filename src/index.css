@@ -76,6 +76,22 @@ body {
   border-bottom: 3px solid #4A2C17;
 }
 
+.grid-cell.blocked {
+  background: linear-gradient(145deg, #800000, #400000);
+  border: 2px solid #600000;
+  position: relative;
+}
+
+.grid-cell.blocked::before {
+  
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 16px;
+  color: #ff9999;
+}
+
 .block-tray {
   display: flex;
   flex-direction: column;
@@ -162,6 +178,59 @@ body {
 .score-value {
   font-size: 24px;
   font-weight: bold;
+}
+
+.difficulty-selector {
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.difficulty-select {
+  padding: 8px 15px;
+  border-radius: 8px;
+  border: 2px solid #8B4513;
+  background: linear-gradient(145deg, #D2B48C, #A0522D);
+  color: white;
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.difficulty-select:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.clearing-message {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: linear-gradient(145deg, #FFD700, #DAA520);
+  color: #8B4513;
+  padding: 20px 30px;
+  border-radius: 15px;
+  font-size: 24px;
+  font-weight: bold;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  z-index: 2000;
+  animation: fadeInOut 2s ease-in-out;
+  border: 3px solid #B8860B;
+}
+
+@keyframes fadeInOut {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.8);
+  }
+  20%, 80% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.8);
+  }
 }
 
 .controls {

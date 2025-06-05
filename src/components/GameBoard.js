@@ -3,7 +3,7 @@ import { useDrop } from 'react-dnd';
 
 const GRID_SIZE = 9;
 
-function GameBoard({ grid, onBlockPlace, availableBlocks, isPaused }) {
+function GameBoard({ grid, onBlockPlace, availableBlocks, isPaused, difficulty }) {
   const [dragPreview, setDragPreview] = useState(null);
   const [previewPosition, setPreviewPosition] = useState({ row: -1, col: -1 });
 
@@ -91,6 +91,13 @@ function GameBoard({ grid, onBlockPlace, availableBlocks, isPaused }) {
               gridRow < 0 || gridCol < 0 || grid[gridRow][gridCol]) {
             return false;
           }
+          
+          // Check blocked center square in hard mode
+          if (difficulty === 'hard' && 
+              gridRow >= 3 && gridRow <= 5 && 
+              gridCol >= 3 && gridCol <= 5) {
+            return false;
+          }
         }
       }
     }
@@ -124,6 +131,12 @@ function GameBoard({ grid, onBlockPlace, availableBlocks, isPaused }) {
     return classes;
   };
 
+  const isCenterBlocked = (rowIndex, colIndex) => {
+    return difficulty === 'hard' && 
+           rowIndex >= 3 && rowIndex <= 5 && 
+           colIndex >= 3 && colIndex <= 5;
+  };
+
   return (
     <div 
       ref={drop}
@@ -137,6 +150,8 @@ function GameBoard({ grid, onBlockPlace, availableBlocks, isPaused }) {
               cell ? 'occupied' : ''
             } ${
               shouldHighlightCell(rowIndex, colIndex) ? 'highlight' : ''
+            } ${
+              isCenterBlocked(rowIndex, colIndex) ? 'blocked' : ''
             }${getSquareBorderClasses(rowIndex, colIndex)}`}
           />
         ))

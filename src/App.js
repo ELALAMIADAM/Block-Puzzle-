@@ -22,6 +22,8 @@ function App() {
   const [gameOver, setGameOver] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [linesCleared, setLinesCleared] = useState(0);
+  const [difficulty, setDifficulty] = useState('normal'); // 'normal' or 'hard'
+  const [clearingMessage, setClearingMessage] = useState('');
 
   // Initialize game
   useEffect(() => {
@@ -53,14 +55,19 @@ function App() {
   }, []);
 
   const clearCompletedLines = useCallback((newGrid) => {
-    let clearedCount = 0;
+    let totalCleared = 0;
+    let rowsCleared = 0;
+    let colsCleared = 0;
+    let squaresCleared = 0;
     const gridCopy = newGrid.map(row => [...row]);
+    const clearedMessages = [];
     
     // Check rows
     for (let row = 0; row < GRID_SIZE; row++) {
       if (gridCopy[row].every(cell => cell)) {
-        clearedCount++;
-        // Clear the row
+        rowsCleared++;
+        totalCleared++;
+        // Clear the row (including blocked center in hard mode)
         for (let col = 0; col < GRID_SIZE; col++) {
           gridCopy[row][col] = false;
         }
@@ -70,8 +77,9 @@ function App() {
     // Check columns
     for (let col = 0; col < GRID_SIZE; col++) {
       if (gridCopy.every(row => row[col])) {
-        clearedCount++;
-        // Clear the column
+        colsCleared++;
+        totalCleared++;
+        // Clear the column (including blocked center in hard mode)
         for (let row = 0; row < GRID_SIZE; row++) {
           gridCopy[row][col] = false;
         }
@@ -82,6 +90,11 @@ function App() {
     for (let squareRow = 0; squareRow < 3; squareRow++) {
       for (let squareCol = 0; squareCol < 3; squareCol++) {
         let isSquareComplete = true;
+        
+        // Skip center square check in hard mode (it's always blocked)
+        if (difficulty === 'hard' && squareRow === 1 && squareCol === 1) {
+          continue;
+        }
         
         // Check if all cells in the 3x3 square are filled
         for (let row = squareRow * 3; row < (squareRow + 1) * 3; row++) {
@@ -96,7 +109,8 @@ function App() {
         
         // If square is complete, clear it
         if (isSquareComplete) {
-          clearedCount++;
+          squaresCleared++;
+          totalCleared++;
           for (let row = squareRow * 3; row < (squareRow + 1) * 3; row++) {
             for (let col = squareCol * 3; col < (squareCol + 1) * 3; col++) {
               gridCopy[row][col] = false;
@@ -106,13 +120,52 @@ function App() {
       }
     }
     
-    if (clearedCount > 0) {
-      setLinesCleared(prev => prev + clearedCount);
-      setScore(prev => prev + clearedCount * 100);
+    if (totalCleared > 0) {
+      // Create clearing message
+      if (rowsCleared > 0) clearedMessages.push(`${rowsCleared} row${rowsCleared > 1 ? 's' : ''}`);
+      if (colsCleared > 0) clearedMessages.push(`${colsCleared} column${colsCleared > 1 ? 's' : ''}`);
+      if (squaresCleared > 0) clearedMessages.push(`${squaresCleared} square${squaresCleared > 1 ? 's' : ''}`);
+      
+      const message = `Cleared: ${clearedMessages.join(', ')}!`;
+      setClearingMessage(message);
+      
+      // Clear message after 2 seconds
+      setTimeout(() => setClearingMessage(''), 2000);
+      
+      setLinesCleared(prev => prev + totalCleared);
+      
+      // Enhanced scoring system
+      let points = 0;
+      const basePoints = 100;
+      
+      // Base points for each clear
+      points += totalCleared * basePoints;
+      
+      // Bonus for multiple clears at once
+      if (totalCleared > 1) {
+        points += (totalCleared - 1) * 50; // 50 bonus per additional clear
+      }
+      
+      // Special bonus for combo clears (different types)
+      let comboTypes = 0;
+      if (rowsCleared > 0) comboTypes++;
+      if (colsCleared > 0) comboTypes++;
+      if (squaresCleared > 0) comboTypes++;
+      
+      if (comboTypes > 1) {
+        points += comboTypes * 100; // 100 bonus per combo type
+      }
+      
+      // Hard mode bonus
+      if (difficulty === 'hard') {
+        points = Math.floor(points * 1.5); // 50% more points in hard mode
+      }
+      
+      setScore(prev => prev + points);
     }
     
     return gridCopy;
-  }, []);
+  }, [difficulty]);
 
   const placeBlock = useCallback((blockShape, startRow, startCol, blockIndex) => {
     if (isPaused || gameOver) return false;
@@ -125,6 +178,13 @@ function App() {
           const gridCol = startCol + col;
           
           if (gridRow >= GRID_SIZE || gridCol >= GRID_SIZE || grid[gridRow][gridCol]) {
+            return false;
+          }
+          
+          // Check if trying to place in blocked center square (hard mode)
+          if (difficulty === 'hard' && 
+              gridRow >= 3 && gridRow <= 5 && 
+              gridCol >= 3 && gridCol <= 5) {
             return false;
           }
         }
@@ -158,7 +218,7 @@ function App() {
     }
 
     return true;
-  }, [grid, availableBlocks, isPaused, gameOver, clearCompletedLines]);
+  }, [grid, availableBlocks, isPaused, gameOver, clearCompletedLines, difficulty]);
 
   const togglePause = () => {
     setIsPaused(!isPaused);
@@ -167,14 +227,34 @@ function App() {
   return (
     <DndProvider backend={HTML5Backend}>
       <div className="game-container">
-        <h1 style={{ color: 'white', fontSize: '36px', margin: '0 0 30px 0', textAlign: 'center' }}>
+        <h1 style={{ color: 'white', fontSize: '36px', margin: '0 0 20px 0', textAlign: 'center' }}>
           Wood Block Puzzle
         </h1>
+        
+        <div className="difficulty-selector">
+          <label style={{ color: 'white', marginRight: '15px' }}>Difficulty:</label>
+          <select 
+            value={difficulty} 
+            onChange={(e) => setDifficulty(e.target.value)}
+            className="difficulty-select"
+            disabled={!gameOver && score > 0}
+          >
+            <option value="normal">Normal</option>
+            <option value="hard">Hard (Blocked Center)</option>
+          </select>
+        </div>
+        
+        {clearingMessage && (
+          <div className="clearing-message">
+            {clearingMessage}
+          </div>
+        )}
         
         <ScoreDisplay 
           score={score} 
           bestScore={bestScore} 
           linesCleared={linesCleared}
+          difficulty={difficulty}
         />
         
         <div className="game-main">
@@ -184,6 +264,7 @@ function App() {
               onBlockPlace={placeBlock}
               availableBlocks={availableBlocks}
               isPaused={isPaused}
+              difficulty={difficulty}
             />
           </div>
           
