@@ -5,7 +5,6 @@ import GameBoard from './components/GameBoard';
 import BlockTray from './components/BlockTray';
 import ScoreDisplay from './components/ScoreDisplay';
 import GameOverModal from './components/GameOverModal';
-import CustomDragLayer from './components/CustomDragLayer';
 import { generateRandomBlocks, checkGameOver } from './utils/gameLogic';
 
 const GRID_SIZE = 9;
@@ -217,7 +216,6 @@ function App() {
           />
         )}
       </div>
-      <CustomDragLayer />
     </DndProvider>
   );
 }
