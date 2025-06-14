@@ -5,6 +5,7 @@ import GameBoard from './components/GameBoard';
 import BlockTray from './components/BlockTray';
 import ScoreDisplay from './components/ScoreDisplay';
 import GameOverModal from './components/GameOverModal';
+import AITrainingPanel from './components/AITrainingPanel';
 import { generateRandomBlocks, checkGameOver } from './utils/gameLogic';
 
 const GRID_SIZE = 9;
@@ -24,13 +25,12 @@ function App() {
   const [linesCleared, setLinesCleared] = useState(0);
   const [difficulty, setDifficulty] = useState('normal'); // 'normal' or 'hard'
   const [clearingMessage, setClearingMessage] = useState('');
-  const [isAIMode, setIsAIMode] = useState(false);
-  const [aiSpeed, setAiSpeed] = useState(1000); // AI delay in milliseconds
+  const [showAIPanel, setShowAIPanel] = useState(false);
 
   // Initialize game
   useEffect(() => {
     resetGame();
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Check for game over when blocks change
   useEffect(() => {
@@ -54,7 +54,6 @@ function App() {
     setGameOver(false);
     setIsPaused(false);
     setLinesCleared(0);
-    setIsAIMode(false); // Reset AI mode on new game
   }, []);
 
   const clearCompletedLines = useCallback((newGrid) => {
@@ -269,90 +268,13 @@ function App() {
     setIsPaused(!isPaused);
   };
 
-  const toggleAIMode = () => {
-    setIsAIMode(!isAIMode);
-    if (!isAIMode) {
-      setIsPaused(false); // Unpause when starting AI
-    }
-  };
-
-  // AI logic to find valid positions for a block
-  const findValidPositions = useCallback((blockShape, currentGrid) => {
-    const validPositions = [];
-    
-    for (let row = 0; row < GRID_SIZE; row++) {
-      for (let col = 0; col < GRID_SIZE; col++) {
-        let canPlace = true;
-        
-        // Check if block can be placed at this position
-        for (let blockRow = 0; blockRow < blockShape.length; blockRow++) {
-          for (let blockCol = 0; blockCol < blockShape[blockRow].length; blockCol++) {
-            if (blockShape[blockRow][blockCol]) {
-              const gridRow = row + blockRow;
-              const gridCol = col + blockCol;
-              
-              // Check bounds
-              if (gridRow >= GRID_SIZE || gridCol >= GRID_SIZE || 
-                  gridRow < 0 || gridCol < 0 || currentGrid[gridRow][gridCol]) {
-                canPlace = false;
-                break;
-              }
-              
-              // Check blocked center square in hard mode
-              if (difficulty === 'hard' && 
-                  gridRow >= 3 && gridRow <= 5 && 
-                  gridCol >= 3 && gridCol <= 5) {
-                canPlace = false;
-                break;
-              }
-            }
-          }
-          if (!canPlace) break;
-        }
-        
-        if (canPlace) {
-          validPositions.push({ row, col });
-        }
-      }
-    }
-    
-    return validPositions;
-  }, [difficulty]);
-
-  // AI automatic play logic
-  useEffect(() => {
-    if (!isAIMode || isPaused || gameOver || availableBlocks.length === 0) return;
-
-    const aiInterval = setInterval(() => {
-      // Try to place a random block
-      const blockIndex = Math.floor(Math.random() * availableBlocks.length);
-      const blockShape = availableBlocks[blockIndex];
-      const validPositions = findValidPositions(blockShape, grid);
-      
-      if (validPositions.length > 0) {
-        // Pick a random valid position
-        const randomPosition = validPositions[Math.floor(Math.random() * validPositions.length)];
-        placeBlock(blockShape, randomPosition.row, randomPosition.col, blockIndex);
-      } else {
-        // Try other blocks if current one can't be placed
-        let placed = false;
-        for (let i = 0; i < availableBlocks.length && !placed; i++) {
-          if (i !== blockIndex) {
-            const otherBlockShape = availableBlocks[i];
-            const otherValidPositions = findValidPositions(otherBlockShape, grid);
-            
-            if (otherValidPositions.length > 0) {
-              const randomPosition = otherValidPositions[Math.floor(Math.random() * otherValidPositions.length)];
-              placeBlock(otherBlockShape, randomPosition.row, randomPosition.col, i);
-              placed = true;
-            }
-          }
-        }
-      }
-    }, aiSpeed);
-
-    return () => clearInterval(aiInterval);
-  }, [isAIMode, isPaused, gameOver, availableBlocks, grid, findValidPositions, placeBlock, aiSpeed]);
+  const handleAIGameStateUpdate = useCallback((aiMove) => {
+    // Execute AI move in the game
+    const { blockIndex, row, col, blockShape } = aiMove;
+    const success = placeBlock(blockShape, row, col, blockIndex);
+    console.log(`🎮 AI move result: ${success ? 'Success' : 'Failed'}`);
+    return success;
+  }, [placeBlock]);
 
   return (
     <DndProvider backend={HTML5Backend}>
@@ -385,7 +307,6 @@ function App() {
           bestScore={bestScore} 
           linesCleared={linesCleared}
           difficulty={difficulty}
-          isAIMode={isAIMode}
         />
         
         <div className="game-main">
@@ -394,7 +315,7 @@ function App() {
               grid={grid} 
               onBlockPlace={placeBlock}
               availableBlocks={availableBlocks}
-              isPaused={isPaused || isAIMode}
+              isPaused={isPaused}
               difficulty={difficulty}
             />
           </div>
@@ -402,49 +323,66 @@ function App() {
           <BlockTray 
             blocks={availableBlocks} 
             onBlockPlace={placeBlock}
-            disabled={isPaused || gameOver || isAIMode}
+            disabled={isPaused || gameOver}
           />
         </div>
         
-        <div className="ai-controls">
-          <button 
-            className={`btn ai-btn ${isAIMode ? 'ai-active' : ''}`}
-            onClick={toggleAIMode}
-            disabled={gameOver}
-          >
-            {isAIMode ? '🤖 Stop AI' : '🤖 Start AI'}
-          </button>
-          
-          {isAIMode && (
-            <div className="ai-speed-control">
-              <label style={{ color: 'white', marginRight: '10px' }}>AI Speed:</label>
-              <select 
-                value={aiSpeed} 
-                onChange={(e) => setAiSpeed(Number(e.target.value))}
-                className="speed-select"
-              >
-                <option value={3000}>Slow (3s)</option>
-                <option value={1500}>Medium (1.5s)</option>
-                <option value={1000}>Normal (1s)</option>
-                <option value={500}>Fast (0.5s)</option>
-                <option value={200}>Very Fast (0.2s)</option>
-              </select>
-            </div>
-          )}
-        </div>
+
 
         <div className="controls">
           <button 
             className="btn" 
             onClick={togglePause}
-            disabled={gameOver || isAIMode}
+            disabled={gameOver}
           >
             {isPaused ? '▶️ Resume' : '⏸️ Pause'}
           </button>
           <button className="btn" onClick={resetGame}>
             🔄 New Game
           </button>
+          <button 
+            className="btn ai-panel-toggle"
+            onClick={() => {
+              setShowAIPanel(!showAIPanel);
+              if (!showAIPanel) {
+                // Scroll to AI panel after it appears
+                setTimeout(() => {
+                  const aiPanel = document.querySelector('.ai-training-panel');
+                  if (aiPanel) {
+                    aiPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                  }
+                }, 100);
+              }
+            }}
+            style={{
+              background: showAIPanel ? 'linear-gradient(145deg, #DC143C, #8B0000)' : 'linear-gradient(145deg, #228B22, #006400)',
+              fontSize: '16px',
+              fontWeight: 'bold'
+            }}
+          >
+            {showAIPanel ? '🤖 Hide AI Panel' : '🤖 Show AI Panel'}
+          </button>
         </div>
+
+        {showAIPanel && (
+          <div style={{ 
+            width: '100%', 
+            display: 'flex', 
+            justifyContent: 'center',
+            marginTop: '20px',
+            animation: 'fadeIn 0.5s ease-in-out'
+          }}>
+            <AITrainingPanel
+              grid={grid}
+              availableBlocks={availableBlocks}
+              score={score}
+              difficulty={difficulty}
+              onGameStateUpdate={handleAIGameStateUpdate}
+              gameOver={gameOver}
+              onResetGame={resetGame}
+            />
+          </div>
+        )}
 
         {gameOver && (
           <GameOverModal 

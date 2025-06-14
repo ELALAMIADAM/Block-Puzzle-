@@ -1,6 +1,6 @@
 import React from 'react';
 
-function ScoreDisplay({ score, bestScore, linesCleared, difficulty, isAIMode }) {
+function ScoreDisplay({ score, bestScore, linesCleared, difficulty }) {
   return (
     <div className="score-container">
       <div className="score-item">
@@ -19,7 +19,6 @@ function ScoreDisplay({ score, bestScore, linesCleared, difficulty, isAIMode }) 
         <div className="score-label">Mode</div>
         <div className="score-value">
           {difficulty === 'hard' ? 'Hard' : 'Normal'}
-          {isAIMode && ' (AI)'}
         </div>
       </div>
     </div>

@@ -2,6 +2,12 @@
   box-sizing: border-box;
 }
 
+html {
+  height: 100%;
+  overflow-y: auto;
+  scroll-behavior: smooth;
+}
+
 body {
   margin: 0;
   padding: 0;
@@ -10,15 +16,19 @@ body {
   -webkit-user-select: none;
   -moz-user-select: none;
   -ms-user-select: none;
+  overflow-x: hidden;
+  overflow-y: auto;
+  min-height: 100%;
 }
 
 .game-container {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   min-height: 100vh;
   padding: 20px;
+  padding-bottom: 40px;
   background: linear-gradient(135deg, #8B4513 0%, #D2691E 100%);
 }
 
@@ -233,6 +243,17 @@ body {
   }
 }
 
+@keyframes fadeIn {
+  0% {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .ai-controls {
   display: flex;
   flex-direction: column;
@@ -317,6 +338,15 @@ body {
   transform: translateY(0);
 }
 
+.ai-panel-toggle {
+  animation: pulse 2s infinite;
+  border: 3px solid #FFD700 !important;
+}
+
+.ai-panel-toggle:hover {
+  box-shadow: 0 0 20px rgba(255, 215, 0, 0.5) !important;
+}
+
 .game-over-overlay {
   position: fixed;
   top: 0;
@@ -383,7 +413,338 @@ body {
   z-index: 1000;
 }
 
+/* AI Training Panel Styles */
+.ai-training-panel {
+  background: rgba(139, 69, 19, 0.2);
+  border-radius: 15px;
+  border: 2px solid #8B4513;
+  padding: 20px;
+  margin: 20px auto 40px auto;
+  color: white;
+  max-width: 900px;
+  width: 100%;
+  position: relative;
+  z-index: 10;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+.ai-training-panel h3 {
+  margin: 0 0 20px 0;
+  text-align: center;
+  font-size: 24px;
+}
+
+.ai-training-panel h4 {
+  margin: 0 0 15px 0;
+  font-size: 18px;
+  color: #FFD700;
+}
+
+.ai-controls {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+.training-section,
+.play-section,
+.model-section {
+  background: rgba(139, 69, 19, 0.3);
+  padding: 15px;
+  border-radius: 10px;
+  border: 1px solid #8B4513;
+}
+
+.control-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.control-group label {
+  font-weight: 500;
+  min-width: 80px;
+}
+
+.control-group input[type="number"],
+.control-group input[type="range"] {
+  flex: 1;
+  padding: 5px 10px;
+  border-radius: 5px;
+  border: 1px solid #8B4513;
+  background: rgba(210, 180, 140, 0.9);
+  color: #333;
+}
+
+.control-group input[type="checkbox"] {
+  margin-right: 5px;
+}
+
+.button-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.button-group .btn {
+  flex: 1;
+  min-width: 100px;
+  padding: 8px 16px;
+  font-size: 14px;
+}
+
+.train-btn {
+  background: linear-gradient(145deg, #228B22, #006400);
+}
+
+.train-btn:disabled {
+  background: linear-gradient(145deg, #555, #333);
+  opacity: 0.6;
+}
+
+.play-btn {
+  background: linear-gradient(145deg, #4169E1, #0000CD);
+}
+
+.stop-btn {
+  background: linear-gradient(145deg, #DC143C, #8B0000);
+}
+
+.reset-btn {
+  background: linear-gradient(145deg, #FF8C00, #FF4500);
+}
+
+.save-btn {
+  background: linear-gradient(145deg, #9932CC, #4B0082);
+}
+
+.load-btn {
+  background: linear-gradient(145deg, #20B2AA, #008B8B);
+}
+
+.test-btn {
+  background: linear-gradient(145deg, #FFA500, #FF8C00);
+}
+
+.training-stats {
+  background: rgba(139, 69, 19, 0.4);
+  padding: 15px;
+  border-radius: 10px;
+  border: 1px solid #8B4513;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+  margin-bottom: 15px;
+}
+
+.stat-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: rgba(139, 69, 19, 0.3);
+  border-radius: 5px;
+  border: 1px solid #8B4513;
+}
+
+.stat-label {
+  font-weight: 500;
+  color: #FFD700;
+}
+
+.stat-value {
+  font-weight: bold;
+  color: white;
+}
+
+.training-progress {
+  text-align: center;
+}
+
+.progress-bar {
+  width: 100%;
+  height: 20px;
+  background: rgba(139, 69, 19, 0.5);
+  border-radius: 10px;
+  border: 1px solid #8B4513;
+  overflow: hidden;
+  margin-bottom: 5px;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #FFD700, #FFA500);
+  transition: width 0.3s ease;
+}
+
+.ai-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  background: rgba(139, 69, 19, 0.3);
+  border-radius: 8px;
+  border: 1px solid #8B4513;
+  margin-bottom: 15px;
+}
+
+.ai-status-indicator {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #dc3545;
+}
+
+.ai-status-indicator.training {
+  background: #28a745;
+  animation: pulse 2s infinite;
+}
+
+.ai-status-indicator.playing {
+  background: #007bff;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(40, 167, 69, 0.7);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(40, 167, 69, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(40, 167, 69, 0);
+  }
+}
+
+/* AI Visualization Styles */
+.ai-visualization {
+  background: rgba(139, 69, 19, 0.4);
+  padding: 20px;
+  border-radius: 10px;
+  border: 1px solid #8B4513;
+  margin-top: 20px;
+}
+
+.ai-visualization h4 {
+  margin: 0 0 15px 0;
+  color: #FFD700;
+}
+
+.viz-container {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.chart-container {
+  flex: 1;
+  min-width: 300px;
+}
+
+.performance-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px;
+  flex: 1;
+  min-width: 250px;
+}
+
+.metric-card {
+  background: rgba(139, 69, 19, 0.3);
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid #8B4513;
+  text-align: center;
+}
+
+.metric-title {
+  font-size: 12px;
+  color: #D2B48C;
+  margin-bottom: 5px;
+  font-weight: 500;
+}
+
+.metric-value {
+  font-size: 18px;
+  font-weight: bold;
+  color: #FFFFFF;
+}
+
+.training-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 15px 0;
+  padding: 10px;
+  background: rgba(40, 167, 69, 0.2);
+  border-radius: 8px;
+  border: 1px solid #28a745;
+  color: #28a745;
+}
+
+.status-indicator {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #28a745;
+}
+
+.status-indicator.pulsing {
+  animation: pulse 2s infinite;
+}
+
+.viz-tips {
+  margin-top: 15px;
+  padding: 15px;
+  background: rgba(139, 69, 19, 0.2);
+  border-radius: 8px;
+  border: 1px solid #8B4513;
+}
+
+.viz-tips h5 {
+  margin: 0 0 10px 0;
+  color: #FFD700;
+  font-size: 14px;
+}
+
+.viz-tips ul {
+  margin: 0;
+  padding-left: 20px;
+  color: #D2B48C;
+  font-size: 12px;
+}
+
+.viz-tips li {
+  margin-bottom: 5px;
+}
+
+.viz-tips strong {
+  color: #FFD700;
+}
+
 @media (max-width: 768px) {
+  .ai-controls {
+    grid-template-columns: 1fr;
+  }
+  
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .button-group {
+    flex-direction: column;
+  }
+  
+  .button-group .btn {
+    flex: none;
+  }
+  
   .game-main {
     flex-direction: column;
     align-items: center;
@@ -411,4 +772,222 @@ body {
     flex-direction: column;
     gap: 15px;
   }
-} 
+}
+
+/* AI Visualization Styles */
+.ai-visualization {
+  background: rgba(139, 69, 19, 0.4);
+  padding: 20px;
+  border-radius: 10px;
+  border: 1px solid #8B4513;
+  margin-top: 20px;
+}
+
+.ai-visualization h4 {
+  margin: 0 0 15px 0;
+  color: #FFD700;
+}
+
+.viz-container {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.chart-container {
+  flex: 1;
+  min-width: 300px;
+}
+
+.performance-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px;
+  flex: 1;
+  min-width: 250px;
+}
+
+.metric-card {
+  background: rgba(139, 69, 19, 0.3);
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid #8B4513;
+  text-align: center;
+}
+
+.metric-title {
+  font-size: 12px;
+  color: #D2B48C;
+  margin-bottom: 5px;
+  font-weight: 500;
+}
+
+.metric-value {
+  font-size: 18px;
+  font-weight: bold;
+  color: #FFFFFF;
+}
+
+.training-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 15px 0;
+  padding: 10px;
+  background: rgba(40, 167, 69, 0.2);
+  border-radius: 8px;
+  border: 1px solid #28a745;
+  color: #28a745;
+}
+
+.status-indicator {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #28a745;
+}
+
+.status-indicator.pulsing {
+  animation: pulse 2s infinite;
+}
+
+.viz-tips {
+  margin-top: 15px;
+  padding: 15px;
+  background: rgba(139, 69, 19, 0.2);
+  border-radius: 8px;
+  border: 1px solid #8B4513;
+}
+
+.viz-tips h5 {
+  margin: 0 0 10px 0;
+  color: #FFD700;
+  font-size: 14px;
+}
+
+.viz-tips ul {
+  margin: 0;
+  padding-left: 20px;
+  color: #D2B48C;
+  font-size: 12px;
+}
+
+.viz-tips li {
+  margin-bottom: 5px;
+}
+
+.viz-tips strong {
+  color: #FFD700;
+}
+
+/* D3.js Chart Specific Styles */
+.chart-section {
+  margin-bottom: 20px;
+}
+
+.chart-section h5 {
+  color: #FFD700;
+  margin: 0 0 10px 0;
+  font-size: 14px;
+  font-weight: bold;
+}
+
+.network-section {
+  margin: 20px 0;
+}
+
+.network-section h5 {
+  color: #FFD700;
+  margin: 0 0 10px 0;
+  font-size: 14px;
+  font-weight: bold;
+}
+
+.network-container {
+  display: flex;
+  justify-content: center;
+  margin: 10px 0;
+}
+
+/* SVG styling for D3 charts */
+.ai-visualization svg {
+  border: 1px solid #8B4513;
+  border-radius: 8px;
+  background: rgba(139, 69, 19, 0.1);
+}
+
+.ai-visualization .domain {
+  stroke: #8B4513 !important;
+}
+
+.ai-visualization .tick line {
+  stroke: #8B4513 !important;
+}
+
+.ai-visualization .tick text {
+  fill: #FFD700 !important;
+  font-size: 11px;
+}
+
+/* Animation for neural network nodes */
+@keyframes pulse-node {
+  0% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.7;
+    transform: scale(1.2);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.ai-visualization .pulsing-node {
+  animation: pulse-node 2s infinite;
+}
+
+/* Enhanced D3.js tooltip styles */
+.d3-tooltip {
+  position: absolute;
+  background: rgba(0, 0, 0, 0.9);
+  color: white;
+  padding: 8px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  border: 1px solid #FFD700;
+  pointer-events: none;
+  z-index: 1000;
+  max-width: 200px;
+}
+
+/* Grid lines for D3 charts */
+.ai-visualization .grid-line {
+  stroke: #8B4513;
+  stroke-opacity: 0.2;
+  stroke-width: 1;
+}
+
+/* Responsive adjustments for D3 charts */
+@media (max-width: 768px) {
+  .viz-container {
+    flex-direction: column;
+  }
+  
+  .chart-section {
+    width: 100%;
+  }
+  
+  .ai-visualization svg {
+    max-width: 100%;
+    height: auto;
+  }
+  
+  .network-container svg {
+    width: 100%;
+    max-width: 500px;
+  }
+}

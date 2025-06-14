@@ -1,6 +1,7 @@
 {
   "name": "wood-block-puzzle",
-  "version": "1.0.0",
+  "version": "0.1.0",
+  "private": true,
   "description": "A Wood Block Puzzle game built with React",
   "main": "index.js",
   "scripts": {
@@ -10,11 +11,24 @@
     "eject": "react-scripts eject"
   },
   "dependencies": {
+    "@tensorflow/tfjs": "^4.22.0",
+    "@tensorflow/tfjs-vis": "^1.5.1",
+    "@testing-library/jest-dom": "^5.16.4",
+    "@testing-library/react": "^13.3.0",
+    "@testing-library/user-event": "^13.5.0",
+    "d3": "^7.9.0",
     "react": "^18.2.0",
+    "react-dnd": "^16.0.1",
+    "react-dnd-html5-backend": "^16.0.1",
     "react-dom": "^18.2.0",
     "react-scripts": "5.0.1",
-    "react-dnd": "^16.0.1",
-    "react-dnd-html5-backend": "^16.0.1"
+    "web-vitals": "^2.1.4"
+  },
+  "eslintConfig": {
+    "extends": [
+      "react-app",
+      "react-app/jest"
+    ]
   },
   "browserslist": {
     "production": [
@@ -28,4 +42,4 @@
       "last 1 safari version"
     ]
   }
-} 
+}

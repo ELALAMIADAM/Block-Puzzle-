@@ -35,14 +35,6 @@ const BLOCK_SHAPES = [
   // Plus shape
   [[false, true, false], [true, true, true], [false, true, false]],
   
-  // 4x1 blocks
-  [[true, true, true, true]],
-  [[true], [true], [true], [true]],
-  
-  // 5x1 blocks
-  [[true, true, true, true, true]],
-  [[true], [true], [true], [true], [true]],
-  
   // Corner shapes
   [[true, false, false], [true, false, false], [true, true, true]],
   [[true, true, true], [true, false, false], [true, false, false]],
