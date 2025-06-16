@@ -59,13 +59,14 @@ export class EliteDQNAgent {
     this.episode = 0;
     this.isTraining = false;
     
-    // Performance tracking
+    // Training metrics
     this.losses = [];
     this.rewards = [];
     this.scores = [];
     this.epsilonHistory = [];
     this.bestScore = 0;
     this.avgScore = 0;
+    this.performanceHistory = [];
     this.recentPerformance = [];
     
     // Line clearing optimization
@@ -694,9 +695,9 @@ export class EliteDQNAgent {
       timestamp: Date.now()
     });
     
-    // Keep only recent performance history
-    if (this.performanceHistory.length > 1000) {
-      this.performanceHistory = this.performanceHistory.slice(-500);
+    // Keep only recent history to prevent memory bloat
+    if (this.performanceHistory.length > 200) {
+      this.performanceHistory = this.performanceHistory.slice(-100);
     }
     
     // Update curriculum and adaptive parameters
@@ -749,21 +750,21 @@ export class EliteDQNAgent {
    * Comprehensive statistics
    */
   getStats() {
-    const recentRewards = this.rewards.slice(-50);
+    const recentRewards = (this.rewards || []).slice(-50);
     const avgReward = recentRewards.length > 0 ? 
       recentRewards.reduce((a, b) => a + b, 0) / recentRewards.length : 0;
     
     // CRITICAL: Calculate average REAL game score for fair comparison
-    const recentScores = this.scores.slice(-50);
+    const recentScores = (this.scores || []).slice(-50);
     const avgScore = recentScores.length > 0 ? 
       recentScores.reduce((a, b) => a + b, 0) / recentScores.length : 0;
     
-    const recentLosses = this.losses.slice(-50);
+    const recentLosses = (this.losses || []).slice(-50);
     const avgLoss = recentLosses.length > 0 ? 
       recentLosses.reduce((a, b) => a + b, 0) / recentLosses.length : 0;
     
     // Elite-specific metrics
-    const recentPerformance = this.performanceHistory.slice(-20);
+    const recentPerformance = (this.performanceHistory || []).slice(-20);
     const performanceTrend = recentPerformance.length >= 2 ? 
       (recentPerformance[recentPerformance.length - 1].score - recentPerformance[0].score) / recentPerformance.length : 0;
 
@@ -787,7 +788,7 @@ export class EliteDQNAgent {
       realPerformance: {
         bestScore: this.bestScore,
         avgScore: avgScore,
-        scores: this.scores.slice(-100), // Last 100 real scores
+        scores: (this.scores || []).slice(-100), // Last 100 real scores
         trend: performanceTrend
       },
       // Elite-specific stats
@@ -796,7 +797,7 @@ export class EliteDQNAgent {
         adaptiveExploration: true,
         prioritizedReplay: true,
         multiStepLearning: this.nStep > 1,
-        performanceHistory: this.performanceHistory.slice(-50)
+        performanceHistory: (this.performanceHistory || []).slice(-50)
       }
     };
   }
