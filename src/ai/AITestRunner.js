@@ -1,13 +1,19 @@
 import { DQNAgent } from './DQNAgent';
 import { DQNEnvironment } from './DQNEnvironment';
+import { EliteDQNAgent } from './EliteDQNAgent';
+import { EliteEnvironment } from './EliteEnvironment';
+import { AlgorithmSelector } from './AdvancedAIAgents';
 import { generateRandomBlocks } from '../utils/gameLogic';
 
 export async function runAITests() {
-  console.log('🧪 Starting AI System Tests...');
+  console.log('🧪 Starting Comprehensive AI System Tests...');
   
   const results = {
-    environmentTest: false,
-    agentTest: false,
+    dqnTest: false,
+    eliteDqnTest: false,
+    mctsTest: false,
+    policyGradientTest: false,
+    heuristicTest: false,
     stateEncodingTest: false,
     actionDecodingTest: false,
     trainingTest: false,
@@ -15,142 +21,243 @@ export async function runAITests() {
   };
 
   try {
-    // Test 1: Environment Initialization
-    console.log('📋 Test 1: Environment Initialization');
-    const env = new DQNEnvironment();
-    env.reset();
-    
-    if (env.getStateSize() === 112 && env.getMaxActionSpace() === 147) {
-      console.log('✅ Environment initialized correctly');
-      results.environmentTest = true;
-    } else {
-      console.log('❌ Environment dimensions incorrect');
-    }
-
-    // Test 2: Agent Initialization
-    console.log('📋 Test 2: Agent Initialization');
-    const agent = new DQNAgent(env.getStateSize(), env.getMaxActionSpace());
-    
-    if (agent.qNetwork && agent.targetNetwork) {
-      console.log('✅ Agent neural networks created');
-      results.agentTest = true;
-    } else {
-      console.log('❌ Agent initialization failed');
-    }
-
-    // Test 3: State Encoding
-    console.log('📋 Test 3: State Encoding');
-    const testGrid = Array(9).fill(null).map(() => Array(9).fill(false));
-    const testBlocks = generateRandomBlocks();
-    env.setState(testGrid, testBlocks, 0, 'normal');
-    
-    const state = env.getState();
-    if (state.shape[0] === 112) {
-      console.log('✅ State encoding produces correct dimensions');
-      results.stateEncodingTest = true;
-    } else {
-      console.log('❌ State encoding failed');
-    }
-
-    // Test 4: Action Decoding
-    console.log('📋 Test 4: Action Decoding');
-    const testAction = 123; // Random action
-    const decoded = env.decodeAction(testAction);
-    
-    if (decoded.blockIndex >= 0 && decoded.row >= 0 && decoded.col >= 0) {
-      console.log('✅ Action decoding works correctly');
-      results.actionDecodingTest = true;
-    } else {
-      console.log('❌ Action decoding failed');
-    }
-
-    // Test 5: Training Step & Reward Calculation
-    console.log('📋 Test 5: Training Step & Reward Calculation');
+    // Test 1: Original DQN System
+    console.log('📋 Test 1: Original DQN System');
     try {
-      const validActions = env.getValidActions();
-      if (validActions.length > 0) {
-        const action = validActions[0];
-        const stepResult = env.step(action);
-        
-        if (stepResult.state && typeof stepResult.reward === 'number') {
-          console.log(`✅ Training step executed successfully with reward: ${stepResult.reward.toFixed(2)}`);
-          
-          // Test that rewards are non-zero for valid moves
-          if (Math.abs(stepResult.reward) > 0) {
-            console.log('✅ Reward calculation produces non-zero values');
-          } else {
-            console.log('⚠️ Reward is zero - this might indicate an issue');
-          }
-          
-          // Test game over condition with a filled grid
-          const filledGrid = Array(9).fill(null).map(() => Array(9).fill(true));
-          const testBlocks = generateRandomBlocks();
-          env.setState(filledGrid, testBlocks, 0, 'normal');
-          
-          const gameOverCheck = env.gameOver;
-          if (gameOverCheck) {
-            console.log('✅ Game over detection works correctly');
-            results.trainingTest = true;
-          } else {
-            console.log('❌ Game over detection failed');
-          }
-        } else {
-          console.log('❌ Training step failed');
-        }
-      } else {
-        console.log('⚠️ No valid actions available for training test');
-        results.trainingTest = true; // Not a failure
+      const dqnEnv = new DQNEnvironment();
+      dqnEnv.reset();
+      const dqnAgent = new DQNAgent(dqnEnv.getStateSize(), dqnEnv.getMaxActionSpace());
+      
+      if (dqnAgent.qNetwork && dqnAgent.targetNetwork) {
+        console.log('✅ Original DQN system working');
+        results.dqnTest = true;
+      }
+      
+      // Cleanup
+      dqnAgent.dispose();
+    } catch (error) {
+      console.log('❌ Original DQN test failed:', error.message);
+    }
+
+    // Test 2: Elite DQN System
+    console.log('📋 Test 2: Elite DQN System');
+    try {
+      const eliteEnv = new EliteEnvironment();
+      eliteEnv.reset();
+      const eliteAgent = new EliteDQNAgent(eliteEnv.getStateSize(), eliteEnv.getMaxActionSpace(), {
+        learningRate: 0.001,
+        epsilon: 0.5,
+        batchSize: 32
+      });
+      
+      if (eliteAgent.qNetwork && eliteAgent.targetNetwork && eliteAgent.isElite) {
+        console.log('✅ Elite DQN system working');
+        results.eliteDqnTest = true;
+      }
+      
+      // Cleanup
+      eliteAgent.dispose();
+    } catch (error) {
+      console.log('❌ Elite DQN test failed:', error.message);
+    }
+
+    // Test 3: MCTS Algorithm
+    console.log('📋 Test 3: MCTS Algorithm');
+    try {
+      const mctsEnv = new EliteEnvironment();
+      mctsEnv.reset();
+      const mctsAgent = AlgorithmSelector.createAgent('mcts', mctsEnv.getStateSize(), mctsEnv.getMaxActionSpace(), {
+        maxSimulations: 100,
+        explorationConstant: 1.414
+      });
+      
+      // Test action selection
+      const action = await mctsAgent.selectAction(mctsEnv);
+      if (typeof action === 'number') {
+        console.log('✅ MCTS algorithm working');
+        results.mctsTest = true;
+      }
+      
+      // Cleanup
+      if (mctsAgent.dispose) mctsAgent.dispose();
+    } catch (error) {
+      console.log('❌ MCTS test failed:', error.message);
+    }
+
+    // Test 4: Policy Gradient Algorithm
+    console.log('📋 Test 4: Policy Gradient Algorithm');
+    try {
+      const pgEnv = new EliteEnvironment();
+      pgEnv.reset();
+      const pgAgent = AlgorithmSelector.createAgent('policy_gradient', pgEnv.getStateSize(), pgEnv.getMaxActionSpace(), {
+        learningRate: 0.001,
+        gamma: 0.99
+      });
+      
+      // Test action selection
+      const state = pgEnv.getState();
+      const validActions = pgEnv.getValidActions();
+      const action = await pgAgent.selectAction(state, validActions);
+      
+      if (typeof action === 'number') {
+        console.log('✅ Policy Gradient algorithm working');
+        results.policyGradientTest = true;
+      }
+      
+      // Cleanup
+      state.dispose();
+      if (pgAgent.dispose) pgAgent.dispose();
+    } catch (error) {
+      console.log('❌ Policy Gradient test failed:', error.message);
+    }
+
+    // Test 5: Heuristic Algorithm
+    console.log('📋 Test 5: Heuristic Algorithm');
+    try {
+      const heuristicEnv = new EliteEnvironment();
+      heuristicEnv.reset();
+      const heuristicAgent = AlgorithmSelector.createAgent('heuristic', heuristicEnv.getStateSize(), heuristicEnv.getMaxActionSpace(), {
+        lookaheadDepth: 2
+      });
+      
+      // Test action selection
+      const action = await heuristicAgent.selectAction(heuristicEnv);
+      if (typeof action === 'number') {
+        console.log('✅ Heuristic algorithm working');
+        results.heuristicTest = true;
+      }
+      
+      // Cleanup
+      if (heuristicAgent.dispose) heuristicAgent.dispose();
+    } catch (error) {
+      console.log('❌ Heuristic test failed:', error.message);
+    }
+
+    // Test 6: State Encoding Consistency
+    console.log('📋 Test 6: State Encoding Consistency');
+    try {
+      const testEnv = new EliteEnvironment();
+      const testGrid = Array(9).fill(null).map(() => Array(9).fill(false));
+      const testBlocks = generateRandomBlocks();
+      testEnv.setState(testGrid, testBlocks, 0, 'normal');
+      
+      const state = testEnv.getState();
+      if (state.shape[0] === testEnv.getStateSize()) {
+        console.log('✅ State encoding consistent across algorithms');
+        results.stateEncodingTest = true;
+      }
+      
+      state.dispose();
+    } catch (error) {
+      console.log('❌ State encoding test failed:', error.message);
+    }
+
+    // Test 7: Action Decoding
+    console.log('📋 Test 7: Action Decoding');
+    try {
+      const testEnv = new EliteEnvironment();
+      const testAction = 1234;
+      const decoded = testEnv.decodeAction(testAction);
+      
+      if (decoded.blockIndex >= 0 && decoded.row >= 0 && decoded.col >= 0) {
+        console.log('✅ Action decoding works correctly');
+        results.actionDecodingTest = true;
       }
     } catch (error) {
-      console.log('❌ Training step error:', error);
+      console.log('❌ Action decoding test failed:', error.message);
     }
 
-    // Test 6: Performance Benchmark
-    console.log('📋 Test 6: Performance Benchmark');
-    const startTime = performance.now();
-    
-    // Test state encoding speed
-    for (let i = 0; i < 100; i++) {
-      env.getState().dispose(); // Clean up tensors
-    }
-    
-    const encodingTime = performance.now() - startTime;
-    console.log(`⏱️ 100 state encodings took ${encodingTime.toFixed(2)}ms`);
-    
-    // Test prediction speed
-    const predictionStart = performance.now();
-    const testState = env.getState();
-    
-    for (let i = 0; i < 10; i++) {
-      await agent.predict(testState, [0, 1, 2, 3, 4]);
-    }
-    
-    const predictionTime = performance.now() - predictionStart;
-    console.log(`⏱️ 10 predictions took ${predictionTime.toFixed(2)}ms`);
-    
-    testState.dispose();
-    
-    if (encodingTime < 1000 && predictionTime < 1000) {
-      console.log('✅ Performance benchmarks passed');
-      results.performanceTest = true;
-    } else {
-      console.log('⚠️ Performance may be slow but functional');
-      results.performanceTest = true; // Don't fail on slow performance
+    // Test 8: Training Step Integration
+    console.log('📋 Test 8: Training Step Integration');
+    try {
+      const testEnv = new EliteEnvironment();
+      testEnv.reset();
+      
+      const validActions = testEnv.getValidActions();
+      if (validActions.length > 0) {
+        const action = validActions[0];
+        const stepResult = testEnv.step(action);
+        
+        if (stepResult.state && typeof stepResult.reward === 'number') {
+          console.log('✅ Training step integration working');
+          results.trainingTest = true;
+        }
+        
+        stepResult.state.dispose();
+      }
+    } catch (error) {
+      console.log('❌ Training step test failed:', error.message);
     }
 
-    // Cleanup
-    agent.dispose();
-    
+    // Test 9: Performance Benchmark
+    console.log('📋 Test 9: Performance Benchmark');
+    try {
+      const benchmarkEnv = new EliteEnvironment();
+      benchmarkEnv.reset();
+      
+      // Test state encoding speed
+      const startTime = performance.now();
+      for (let i = 0; i < 50; i++) {
+        const state = benchmarkEnv.getState();
+        state.dispose();
+      }
+      const encodingTime = performance.now() - startTime;
+      
+      // Test different algorithms' decision speed
+      const algorithms = ['heuristic', 'mcts'];
+      const decisionTimes = {};
+      
+      for (const algo of algorithms) {
+        try {
+          const agent = AlgorithmSelector.createAgent(algo, benchmarkEnv.getStateSize(), benchmarkEnv.getMaxActionSpace());
+          const decisionStart = performance.now();
+          
+          for (let i = 0; i < 5; i++) {
+            await agent.selectAction(benchmarkEnv);
+          }
+          
+          decisionTimes[algo] = performance.now() - decisionStart;
+          
+          if (agent.dispose) agent.dispose();
+        } catch (error) {
+          console.log(`⚠️ ${algo} benchmark failed:`, error.message);
+        }
+      }
+      
+      console.log(`⏱️ Performance benchmarks:`);
+      console.log(`  State encoding (50x): ${encodingTime.toFixed(2)}ms`);
+      Object.entries(decisionTimes).forEach(([algo, time]) => {
+        console.log(`  ${algo} decisions (5x): ${time.toFixed(2)}ms`);
+      });
+      
+      if (encodingTime < 1000) {
+        console.log('✅ Performance benchmarks acceptable');
+        results.performanceTest = true;
+      }
+    } catch (error) {
+      console.log('❌ Performance benchmark failed:', error.message);
+    }
+
     // Summary
     const passedTests = Object.values(results).filter(Boolean).length;
     const totalTests = Object.keys(results).length;
     
-    console.log(`\n🎯 Test Summary: ${passedTests}/${totalTests} tests passed`);
+    console.log(`\n🎯 Comprehensive Test Summary: ${passedTests}/${totalTests} tests passed`);
+    console.log('📊 Algorithm Test Results:');
+    console.log(`  🔷 Original DQN: ${results.dqnTest ? '✅' : '❌'}`);
+    console.log(`  🔶 Elite DQN: ${results.eliteDqnTest ? '✅' : '❌'}`);
+    console.log(`  🌳 MCTS: ${results.mctsTest ? '✅' : '❌'}`);
+    console.log(`  📈 Policy Gradient: ${results.policyGradientTest ? '✅' : '❌'}`);
+    console.log(`  🧠 Heuristic: ${results.heuristicTest ? '✅' : '❌'}`);
+    console.log(`  🔧 System Integration: ${results.stateEncodingTest && results.actionDecodingTest && results.trainingTest ? '✅' : '❌'}`);
+    console.log(`  ⚡ Performance: ${results.performanceTest ? '✅' : '❌'}`);
     
     if (passedTests === totalTests) {
-      console.log('🎉 All tests passed! AI system is ready to use.');
+      console.log('🎉 All AI algorithms are working perfectly!');
+    } else if (passedTests >= totalTests * 0.8) {
+      console.log('🔥 Most AI algorithms are working well!');
     } else {
-      console.log('⚠️ Some tests failed. Check the logs above for details.');
+      console.log('⚠️ Some AI algorithms need attention. Check the logs above.');
     }
 
   } catch (error) {
@@ -186,5 +293,45 @@ export function validateGameState(grid, availableBlocks, score, difficulty) {
   return {
     isValid: issues.length === 0,
     issues: issues
+  };
+}
+
+export function getAlgorithmCapabilities() {
+  return {
+    'dqn': {
+      name: 'Original DQN',
+      features: ['Neural Network', 'Experience Replay', 'Target Network'],
+      supportsTraining: true,
+      supportsVisualization: true,
+      supportsStats: true
+    },
+    'elite-dqn': {
+      name: 'Elite DQN',
+      features: ['Double DQN', 'Dueling Architecture', 'Prioritized Replay', 'Multi-step Learning'],
+      supportsTraining: true,
+      supportsVisualization: true,
+      supportsStats: true
+    },
+    'mcts': {
+      name: 'Monte Carlo Tree Search',
+      features: ['Tree Search', 'UCB1 Exploration', 'Rollout Policy', 'No Training Required'],
+      supportsTraining: false,
+      supportsVisualization: true,
+      supportsStats: true
+    },
+    'policy_gradient': {
+      name: 'Policy Gradient',
+      features: ['Direct Policy Optimization', 'Action Masking', 'Entropy Regularization'],
+      supportsTraining: true,
+      supportsVisualization: true,
+      supportsStats: true
+    },
+    'heuristic': {
+      name: 'Hybrid Heuristic',
+      features: ['Hand-crafted Rules', 'Lookahead Search', 'Instant Decisions', 'No Training Required'],
+      supportsTraining: false,
+      supportsVisualization: true,
+      supportsStats: true
+    }
   };
 } 

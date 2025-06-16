@@ -1,534 +1,488 @@
-import React, { useEffect, useRef, useState } from 'react';
-import * as d3 from 'd3';
+import React, { useEffect, useRef } from 'react';
 
-function AIVisualization({ trainingStats, isTraining }) {
+function AIVisualization({ trainingStats, isTraining, compact = false, showOnlyNetwork = false }) {
   const chartRef = useRef(null);
+  const networkRef = useRef(null);
+  const scoreChartRef = useRef(null);
+  const rewardChartRef = useRef(null);
   const lossChartRef = useRef(null);
-  const networkVisualizationRef = useRef(null);
-  const [lastUpdateTime, setLastUpdateTime] = useState(Date.now());
-
-  // Always draw network on mount
-  useEffect(() => {
-    drawNetworkVisualization();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (!trainingStats || Object.keys(trainingStats).length === 0) {
-      console.log('🎨 No training stats available for visualization');
-      return;
+    if (!trainingStats || Object.keys(trainingStats).length === 0) return;
+
+    // Clear existing charts
+    if (chartRef.current) chartRef.current.innerHTML = '';
+    if (networkRef.current) networkRef.current.innerHTML = '';
+    if (scoreChartRef.current) scoreChartRef.current.innerHTML = '';
+    if (rewardChartRef.current) rewardChartRef.current.innerHTML = '';
+    if (lossChartRef.current) lossChartRef.current.innerHTML = '';
+
+    // Draw appropriate charts based on algorithm and available data
+    if (!showOnlyNetwork) {
+      if (trainingStats.scores && trainingStats.scores.length > 0) {
+        drawScoreChart();
+      }
+      if (trainingStats.rewards && trainingStats.rewards.length > 0) {
+        drawRewardChart();
+      }
+      if (trainingStats.losses && trainingStats.losses.length > 0 && trainingStats.supportsTraining) {
+        drawLossChart();
+      }
     }
     
-    console.log('🎨 Updating AI visualization with stats:', trainingStats);
+    // Draw network visualization for DQN variants
+    if (trainingStats.algorithm && (
+      trainingStats.algorithm.includes('DQN') || 
+      trainingStats.algorithm.includes('Policy')
+    )) {
+      drawNetworkVisualization();
+    }
+  }, [trainingStats, compact, showOnlyNetwork]);
     
-    if (trainingStats.rewards && trainingStats.rewards.length > 0) {
-      drawRewardChart();
+  const drawScoreChart = () => {
+    if (!trainingStats.scores || trainingStats.scores.length === 0) return;
+    
+    const canvas = document.createElement('canvas');
+    canvas.width = compact ? 300 : 400;
+    canvas.height = compact ? 150 : 200;
+    scoreChartRef.current.appendChild(canvas);
+    
+    const ctx = canvas.getContext('2d');
+    const scores = trainingStats.scores.slice(-100); // Show last 100 episodes
+    
+    if (scores.length === 0) return;
+    
+    // Chart setup
+    const padding = 30;
+    const chartWidth = canvas.width - 2 * padding;
+    const chartHeight = canvas.height - 2 * padding;
+    
+    const maxScore = Math.max(...scores, 1);
+    const minScore = Math.min(...scores, 0);
+    const scoreRange = maxScore - minScore || 1;
+    
+    // Clear and setup
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    // Grid
+    ctx.strokeStyle = '#333';
+    ctx.lineWidth = 1;
+    for (let i = 0; i <= 5; i++) {
+      const y = padding + (i / 5) * chartHeight;
+      ctx.beginPath();
+      ctx.moveTo(padding, y);
+      ctx.lineTo(padding + chartWidth, y);
+      ctx.stroke();
     }
     
-    if (trainingStats.losses && trainingStats.losses.length > 0) {
-      drawLossChart();
+    // Score line
+    ctx.strokeStyle = '#4CAF50';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    
+    scores.forEach((score, index) => {
+      const x = padding + (index / (scores.length - 1)) * chartWidth;
+      const y = padding + (1 - (score - minScore) / scoreRange) * chartHeight;
+      
+      if (index === 0) {
+        ctx.moveTo(x, y);
+      } else {
+        ctx.lineTo(x, y);
+      }
+    });
+    ctx.stroke();
+    
+    // Moving average
+    const movingAvg = getMovingAverage(scores, 10);
+    if (movingAvg.length > 1) {
+      ctx.strokeStyle = '#FFD700';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      
+      movingAvg.forEach((avg, index) => {
+        const x = padding + ((index + 9) / (scores.length - 1)) * chartWidth;
+        const y = padding + (1 - (avg - minScore) / scoreRange) * chartHeight;
+        
+        if (index === 0) {
+          ctx.moveTo(x, y);
+        } else {
+          ctx.lineTo(x, y);
+        }
+      });
+      ctx.stroke();
     }
     
-    drawNetworkVisualization();
-    setLastUpdateTime(Date.now());
-  }, [trainingStats]); // eslint-disable-line react-hooks/exhaustive-deps
+    // Best score line
+    if (trainingStats.bestScore > 0) {
+      const bestY = padding + (1 - (trainingStats.bestScore - minScore) / scoreRange) * chartHeight;
+      ctx.strokeStyle = '#FF4444';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([5, 5]);
+      ctx.beginPath();
+      ctx.moveTo(padding, bestY);
+      ctx.lineTo(padding + chartWidth, bestY);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    
+    // Labels
+    ctx.fillStyle = '#FFD700';
+    ctx.font = '12px Arial';
+    ctx.textAlign = 'left';
+    
+    // Y-axis labels
+    for (let i = 0; i <= 5; i++) {
+      const y = padding + (i / 5) * chartHeight;
+      const value = maxScore - (i / 5) * scoreRange;
+      ctx.fillText(formatNumber(value), 2, y + 4);
+    }
+    
+    // Title and current value
+    ctx.textAlign = 'center';
+    ctx.font = 'bold 14px Arial';
+    ctx.fillText('Score Progress', canvas.width / 2, 20);
+    
+    const currentScore = scores[scores.length - 1] || 0;
+    const avgScore = trainingStats.avgScore || (scores.reduce((a, b) => a + b, 0) / scores.length);
+    
+    ctx.font = '12px Arial';
+    ctx.fillText(`Current: ${formatNumber(currentScore)} | Avg: ${formatNumber(avgScore)} | Best: ${formatNumber(trainingStats.bestScore)}`, 
+                canvas.width / 2, canvas.height - 5);
+  };
 
   const drawRewardChart = () => {
-    const container = chartRef.current;
-    if (!container) return;
-
-    // Clear previous chart
-    d3.select(container).selectAll("*").remove();
-
-    const { rewards, epsilonHistory } = trainingStats;
-    if (!rewards || rewards.length === 0) return;
-
-    // Set dimensions and margins
-    const margin = { top: 20, right: 80, bottom: 40, left: 50 };
-    const width = 500 - margin.left - margin.right;
-    const height = 300 - margin.bottom - margin.top;
-
-    // Create SVG
-    const svg = d3.select(container)
-      .append("svg")
-      .attr("width", width + margin.left + margin.right)
-      .attr("height", height + margin.top + margin.bottom)
-      .style("background", "rgba(139, 69, 19, 0.1)")
-      .style("border-radius", "8px");
-
-    const g = svg.append("g")
-      .attr("transform", `translate(${margin.left},${margin.top})`);
-
-    // Create scales
-    const xScale = d3.scaleLinear()
-      .domain([0, rewards.length - 1])
-      .range([0, width]);
-
-    const yScaleReward = d3.scaleLinear()
-      .domain(d3.extent(rewards))
-      .range([height, 0]);
-
-    const yScaleEpsilon = d3.scaleLinear()
-      .domain([0, 1])
-      .range([height, 0]);
-
-    // Create line generators
-    const rewardLine = d3.line()
-      .x((d, i) => xScale(i))
-      .y(d => yScaleReward(d))
-      .curve(d3.curveMonotoneX);
-
-    const epsilonLine = d3.line()
-      .x((d, i) => xScale(i))
-      .y(d => yScaleEpsilon(d))
-      .curve(d3.curveMonotoneX);
-
-    // Add axes
-    g.append("g")
-      .attr("transform", `translate(0,${height})`)
-      .call(d3.axisBottom(xScale).tickFormat(d3.format("d")).ticks(6))
-      .selectAll("text")
-      .style("fill", "#FFD700");
-
-    g.append("text")
-      .attr("x", width / 2)
-      .attr("y", height + 35)
-      .attr("fill", "#FFD700")
-      .style("text-anchor", "middle")
-      .style("font-weight", "bold")
-      .text("Episodes");
-
-    g.append("g")
-      .call(d3.axisLeft(yScaleReward).ticks(6))
-      .selectAll("text")
-      .style("fill", "#FFD700");
-
-    g.append("text")
-      .attr("transform", "rotate(-90)")
-      .attr("y", -35)
-      .attr("x", -height / 2)
-      .attr("fill", "#FFD700")
-      .style("text-anchor", "middle")
-      .style("font-weight", "bold")
-      .text("Reward");
-
-    // Add right y-axis for epsilon
-    g.append("g")
-      .attr("transform", `translate(${width}, 0)`)
-      .call(d3.axisRight(yScaleEpsilon).ticks(6))
-      .selectAll("text")
-      .style("fill", "#00CED1");
-
-    g.append("text")
-      .attr("transform", "rotate(-90)")
-      .attr("y", width + 50)
-      .attr("x", -height / 2)
-      .attr("fill", "#00CED1")
-      .style("text-anchor", "middle")
-      .style("font-weight", "bold")
-      .text("Epsilon");
-
-    // Style axes
-    g.selectAll(".domain")
-      .style("stroke", "#8B4513");
+    if (!trainingStats.rewards || trainingStats.rewards.length === 0) return;
     
-    g.selectAll(".tick line")
-      .style("stroke", "#8B4513");
-
-    // Add grid lines
-    g.selectAll(".grid-line")
-      .data(yScaleReward.ticks())
-      .enter()
-      .append("line")
-      .attr("class", "grid-line")
-      .attr("x1", 0)
-      .attr("x2", width)
-      .attr("y1", d => yScaleReward(d))
-      .attr("y2", d => yScaleReward(d))
-      .attr("stroke", "#8B4513")
-      .attr("stroke-opacity", 0.2)
-      .attr("stroke-width", 1);
-
-    // Add reward line with animation
-    const rewardPath = g.append("path")
-      .datum(rewards)
-      .attr("fill", "none")
-      .attr("stroke", "#FFD700")
-      .attr("stroke-width", 3)
-      .attr("d", rewardLine);
-
-    // Animate the line drawing
-    const totalLength = rewardPath.node().getTotalLength();
-    rewardPath
-      .attr("stroke-dasharray", totalLength + " " + totalLength)
-      .attr("stroke-dashoffset", totalLength)
-      .transition()
-      .duration(2000)
-      .attr("stroke-dashoffset", 0);
-
-    // Add epsilon line if available
-    if (epsilonHistory && epsilonHistory.length > 0) {
-      const epsilonPath = g.append("path")
-        .datum(epsilonHistory)
-        .attr("fill", "none")
-        .attr("stroke", "#00CED1")
-        .attr("stroke-width", 2)
-        .attr("stroke-dasharray", "5,5")
-        .attr("d", epsilonLine);
-
-      // Animate epsilon line
-      const epsilonLength = epsilonPath.node().getTotalLength();
-      epsilonPath
-        .attr("stroke-dasharray", epsilonLength + " " + epsilonLength)
-        .attr("stroke-dashoffset", epsilonLength)
-        .transition()
-        .delay(500)
-        .duration(1500)
-        .attr("stroke-dashoffset", 0);
+    const canvas = document.createElement('canvas');
+    canvas.width = compact ? 300 : 400;
+    canvas.height = compact ? 150 : 200;
+    rewardChartRef.current.appendChild(canvas);
+    
+    const ctx = canvas.getContext('2d');
+    const rewards = trainingStats.rewards.slice(-100);
+    
+    if (rewards.length === 0) return;
+    
+    // Chart setup
+    const padding = 30;
+    const chartWidth = canvas.width - 2 * padding;
+    const chartHeight = canvas.height - 2 * padding;
+    
+    const maxReward = Math.max(...rewards, 1);
+    const minReward = Math.min(...rewards, 0);
+    const rewardRange = maxReward - minReward || 1;
+    
+    // Clear and setup
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    // Grid
+    ctx.strokeStyle = '#333';
+    ctx.lineWidth = 1;
+    for (let i = 0; i <= 5; i++) {
+      const y = padding + (i / 5) * chartHeight;
+      ctx.beginPath();
+      ctx.moveTo(padding, y);
+      ctx.lineTo(padding + chartWidth, y);
+      ctx.stroke();
     }
-
-    // Add moving average line
-    const movingAvg = getMovingAverage(rewards, 10);
-    if (movingAvg.length > 0) {
-      const avgLine = d3.line()
-        .x((d, i) => xScale(i + 9))
-        .y(d => yScaleReward(d))
-        .curve(d3.curveMonotoneX);
-
-      g.append("path")
-        .datum(movingAvg)
-        .attr("fill", "none")
-        .attr("stroke", "#FF6B6B")
-        .attr("stroke-width", 2)
-        .attr("opacity", 0.8)
-        .attr("d", avgLine);
+    
+    // Zero line
+    if (minReward < 0 && maxReward > 0) {
+      const zeroY = padding + (1 - (0 - minReward) / rewardRange) * chartHeight;
+      ctx.strokeStyle = '#666';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([3, 3]);
+      ctx.beginPath();
+      ctx.moveTo(padding, zeroY);
+      ctx.lineTo(padding + chartWidth, zeroY);
+      ctx.stroke();
+      ctx.setLineDash([]);
     }
-
-    // Add legend
-    const legend = g.append("g")
-      .attr("transform", `translate(${width - 100}, 20)`);
-
-    const legendData = [
-      { color: "#FFD700", text: "Reward", pattern: "none" },
-      { color: "#00CED1", text: "Epsilon", pattern: "5,5" },
-      { color: "#FF6B6B", text: "Avg (10)", pattern: "none" }
-    ];
-
-    legendData.forEach((item, i) => {
-      const legendItem = legend.append("g")
-        .attr("transform", `translate(0, ${i * 20})`);
-
-      legendItem.append("line")
-        .attr("x1", 0).attr("x2", 20)
-        .attr("y1", 0).attr("y2", 0)
-        .attr("stroke", item.color)
-        .attr("stroke-width", 2)
-        .attr("stroke-dasharray", item.pattern);
-
-      legendItem.append("text")
-        .attr("x", 25).attr("y", 5)
-        .attr("fill", item.color)
-        .style("font-size", "12px")
-        .style("font-weight", "bold")
-        .text(item.text);
+    
+    // Reward line
+    ctx.strokeStyle = '#2196F3';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    
+    rewards.forEach((reward, index) => {
+      const x = padding + (index / (rewards.length - 1)) * chartWidth;
+      const y = padding + (1 - (reward - minReward) / rewardRange) * chartHeight;
+      
+      if (index === 0) {
+        ctx.moveTo(x, y);
+      } else {
+        ctx.lineTo(x, y);
+      }
     });
+    ctx.stroke();
+    
+    // Moving average
+    const movingAvg = getMovingAverage(rewards, 10);
+    if (movingAvg.length > 1) {
+      ctx.strokeStyle = '#FF9800';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      
+      movingAvg.forEach((avg, index) => {
+        const x = padding + ((index + 9) / (rewards.length - 1)) * chartWidth;
+        const y = padding + (1 - (avg - minReward) / rewardRange) * chartHeight;
+        
+        if (index === 0) {
+          ctx.moveTo(x, y);
+        } else {
+          ctx.lineTo(x, y);
+        }
+      });
+      ctx.stroke();
+    }
+    
+    // Labels
+    ctx.fillStyle = '#FFD700';
+    ctx.font = '12px Arial';
+    ctx.textAlign = 'left';
+    
+    // Y-axis labels
+    for (let i = 0; i <= 5; i++) {
+      const y = padding + (i / 5) * chartHeight;
+      const value = maxReward - (i / 5) * rewardRange;
+      ctx.fillText(formatNumber(value), 2, y + 4);
+    }
+    
+    // Title and current value
+    ctx.textAlign = 'center';
+    ctx.font = 'bold 14px Arial';
+    ctx.fillText('Reward Progress', canvas.width / 2, 20);
+    
+    const currentReward = rewards[rewards.length - 1] || 0;
+    const avgReward = trainingStats.avgReward || (rewards.reduce((a, b) => a + b, 0) / rewards.length);
+    
+    ctx.font = '12px Arial';
+    ctx.fillText(`Current: ${formatNumber(currentReward)} | Avg: ${formatNumber(avgReward)}`, 
+                canvas.width / 2, canvas.height - 5);
   };
 
   const drawLossChart = () => {
-    const container = lossChartRef.current;
-    if (!container || !trainingStats.losses || trainingStats.losses.length === 0) return;
-
-    // Clear previous chart
-    d3.select(container).selectAll("*").remove();
-
-    const losses = trainingStats.losses;
+    if (!trainingStats.losses || trainingStats.losses.length === 0) return;
     
-    // Set dimensions and margins
-    const margin = { top: 20, right: 30, bottom: 40, left: 60 };
-    const width = 400 - margin.left - margin.right;
-    const height = 200 - margin.bottom - margin.top;
-
-    // Create SVG
-    const svg = d3.select(container)
-      .append("svg")
-      .attr("width", width + margin.left + margin.right)
-      .attr("height", height + margin.top + margin.bottom)
-      .style("background", "rgba(139, 69, 19, 0.1)")
-      .style("border-radius", "8px");
-
-    const g = svg.append("g")
-      .attr("transform", `translate(${margin.left},${margin.top})`);
-
-    // Create scales
-    const xScale = d3.scaleLinear()
-      .domain([0, losses.length - 1])
-      .range([0, width]);
-
-    const yScale = d3.scaleLinear()
-      .domain(d3.extent(losses))
-      .range([height, 0]);
-
-    // Create line generator
-    const line = d3.line()
-      .x((d, i) => xScale(i))
-      .y(d => yScale(d))
-      .curve(d3.curveMonotoneX);
-
-    // Add axes
-    g.append("g")
-      .attr("transform", `translate(0,${height})`)
-      .call(d3.axisBottom(xScale).tickFormat(d3.format("d")).ticks(5))
-      .selectAll("text")
-      .style("fill", "#FFD700");
-
-    g.append("text")
-      .attr("x", width / 2)
-      .attr("y", height + 35)
-      .attr("fill", "#FFD700")
-      .style("text-anchor", "middle")
-      .style("font-weight", "bold")
-      .text("Training Steps");
-
-    g.append("g")
-      .call(d3.axisLeft(yScale).tickFormat(d3.format(".3f")).ticks(5))
-      .selectAll("text")
-      .style("fill", "#FFD700");
-
-    g.append("text")
-      .attr("transform", "rotate(-90)")
-      .attr("y", -40)
-      .attr("x", -height / 2)
-      .attr("fill", "#FFD700")
-      .style("text-anchor", "middle")
-      .style("font-weight", "bold")
-      .text("Loss");
-
-    // Style axes
-    g.selectAll(".domain")
-      .style("stroke", "#8B4513");
+    const canvas = document.createElement('canvas');
+    canvas.width = compact ? 300 : 400;
+    canvas.height = compact ? 150 : 200;
+    lossChartRef.current.appendChild(canvas);
     
-    g.selectAll(".tick line")
-      .style("stroke", "#8B4513");
-
-    // Add gradient
-    const gradient = svg.append("defs")
-      .append("linearGradient")
-      .attr("id", "loss-gradient")
-      .attr("gradientUnits", "userSpaceOnUse")
-      .attr("x1", 0).attr("y1", height)
-      .attr("x2", 0).attr("y2", 0);
-
-    gradient.append("stop")
-      .attr("offset", "0%")
-      .attr("stop-color", "#FF6B6B")
-      .attr("stop-opacity", 0.1);
-
-    gradient.append("stop")
-      .attr("offset", "100%")
-      .attr("stop-color", "#FF6B6B")
-      .attr("stop-opacity", 0.8);
-
-    // Add area under curve
-    const area = d3.area()
-      .x((d, i) => xScale(i))
-      .y0(height)
-      .y1(d => yScale(d))
-      .curve(d3.curveMonotoneX);
-
-    g.append("path")
-      .datum(losses)
-      .attr("fill", "url(#loss-gradient)")
-      .attr("d", area);
-
-    // Add loss line
-    const lossPath = g.append("path")
-      .datum(losses)
-      .attr("fill", "none")
-      .attr("stroke", "#FF6B6B")
-      .attr("stroke-width", 2)
-      .attr("d", line);
-
-    // Animate loss line
-    const totalLength = lossPath.node().getTotalLength();
-    lossPath
-      .attr("stroke-dasharray", totalLength + " " + totalLength)
-      .attr("stroke-dashoffset", totalLength)
-      .transition()
-      .duration(1500)
-      .attr("stroke-dashoffset", 0);
+    const ctx = canvas.getContext('2d');
+    const losses = trainingStats.losses.slice(-100);
+    
+    if (losses.length === 0) return;
+    
+    // Chart setup
+    const padding = 30;
+    const chartWidth = canvas.width - 2 * padding;
+    const chartHeight = canvas.height - 2 * padding;
+    
+    const maxLoss = Math.max(...losses, 1);
+    const minLoss = Math.min(...losses, 0);
+    const lossRange = maxLoss - minLoss || 1;
+    
+    // Clear and setup
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    // Grid
+    ctx.strokeStyle = '#333';
+    ctx.lineWidth = 1;
+    for (let i = 0; i <= 5; i++) {
+      const y = padding + (i / 5) * chartHeight;
+      ctx.beginPath();
+      ctx.moveTo(padding, y);
+      ctx.lineTo(padding + chartWidth, y);
+      ctx.stroke();
+    }
+    
+    // Loss line
+    ctx.strokeStyle = '#F44336';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    
+    losses.forEach((loss, index) => {
+      const x = padding + (index / (losses.length - 1)) * chartWidth;
+      const y = padding + (1 - (loss - minLoss) / lossRange) * chartHeight;
+      
+      if (index === 0) {
+        ctx.moveTo(x, y);
+      } else {
+        ctx.lineTo(x, y);
+      }
+    });
+    ctx.stroke();
+    
+    // Moving average
+    const movingAvg = getMovingAverage(losses, 10);
+    if (movingAvg.length > 1) {
+      ctx.strokeStyle = '#9C27B0';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      
+      movingAvg.forEach((avg, index) => {
+        const x = padding + ((index + 9) / (losses.length - 1)) * chartWidth;
+        const y = padding + (1 - (avg - minLoss) / lossRange) * chartHeight;
+        
+        if (index === 0) {
+          ctx.moveTo(x, y);
+        } else {
+          ctx.lineTo(x, y);
+        }
+      });
+      ctx.stroke();
+    }
+    
+    // Labels
+    ctx.fillStyle = '#FFD700';
+    ctx.font = '12px Arial';
+    ctx.textAlign = 'left';
+    
+    // Y-axis labels
+    for (let i = 0; i <= 5; i++) {
+      const y = padding + (i / 5) * chartHeight;
+      const value = maxLoss - (i / 5) * lossRange;
+      ctx.fillText(formatNumber(value), 2, y + 4);
+    }
+    
+    // Title and current value
+    ctx.textAlign = 'center';
+    ctx.font = 'bold 14px Arial';
+    ctx.fillText('Training Loss', canvas.width / 2, 20);
+    
+    const currentLoss = losses[losses.length - 1] || 0;
+    const avgLoss = trainingStats.avgLoss || (losses.reduce((a, b) => a + b, 0) / losses.length);
+    
+    ctx.font = '12px Arial';
+    ctx.fillText(`Current: ${formatNumber(currentLoss)} | Avg: ${formatNumber(avgLoss)}`, 
+                canvas.width / 2, canvas.height - 5);
   };
 
   const drawNetworkVisualization = () => {
-    const container = networkVisualizationRef.current;
-    if (!container) return;
-
-    // Clear previous visualization
-    d3.select(container).selectAll("*").remove();
-
-    // IMPROVED Network architecture: [112, 256, 256, 128, 64, 147]
-    const layers = [112, 256, 256, 128, 64, 147];
-    const layerNames = ['Input\n(State)', 'Hidden 1\n(BatchNorm)', 'Hidden 2\n(BatchNorm)', 'Hidden 3\n(ReLU)', 'Hidden 4\n(ReLU)', 'Output\n(Actions)'];
+    if (!trainingStats.algorithm) return;
     
-    const width = 800;
-    const height = 400;
-    const margin = { top: 60, right: 30, bottom: 100, left: 30 };
+    const canvas = document.createElement('canvas');
+    canvas.width = compact ? 250 : 300;
+    canvas.height = compact ? 200 : 250;
+    networkRef.current.appendChild(canvas);
     
-    const svg = d3.select(container)
-      .append("svg")
-      .attr("width", width)
-      .attr("height", height)
-      .style("background", "rgba(139, 69, 19, 0.1)")
-      .style("border-radius", "8px");
-
-    const layerWidth = (width - margin.left - margin.right) / (layers.length - 1);
+    const ctx = canvas.getContext('2d');
+    
+    // Clear canvas
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    // Network architecture visualization
+    const layers = [];
+    
+    if (trainingStats.algorithm.includes('DQN')) {
+      // DQN architecture
+      layers.push({ name: 'Input', neurons: 'State', color: '#4CAF50' });
+      layers.push({ name: 'Hidden 1', neurons: '128', color: '#2196F3' });
+      layers.push({ name: 'Hidden 2', neurons: '128', color: '#2196F3' });
+      layers.push({ name: 'Hidden 3', neurons: '64', color: '#2196F3' });
+      layers.push({ name: 'Output', neurons: 'Actions', color: '#FF9800' });
+    } else if (trainingStats.algorithm.includes('Policy')) {
+      // Policy Gradient architecture
+      layers.push({ name: 'Input', neurons: 'State', color: '#4CAF50' });
+      layers.push({ name: 'Hidden 1', neurons: '128', color: '#9C27B0' });
+      layers.push({ name: 'Hidden 2', neurons: '128', color: '#9C27B0' });
+      layers.push({ name: 'Hidden 3', neurons: '64', color: '#9C27B0' });
+      layers.push({ name: 'Policy', neurons: 'Softmax', color: '#E91E63' });
+    } else {
+      // Generic network
+      layers.push({ name: 'Input', neurons: 'State', color: '#4CAF50' });
+      layers.push({ name: 'Processing', neurons: 'Rules', color: '#607D8B' });
+      layers.push({ name: 'Output', neurons: 'Action', color: '#FF9800' });
+    }
+    
+    const layerWidth = canvas.width / layers.length;
+    const centerY = canvas.height / 2;
 
     // Draw connections
+    ctx.strokeStyle = '#444';
+    ctx.lineWidth = 1;
     for (let i = 0; i < layers.length - 1; i++) {
-      for (let j = 0; j < Math.min(3, layers[i]); j++) {
-        for (let k = 0; k < Math.min(3, layers[i + 1]); k++) {
-          const x1 = margin.left + i * layerWidth;
-          const y1 = margin.top + (j + 1) * (height - margin.top - margin.bottom) / 4;
-          const x2 = margin.left + (i + 1) * layerWidth;
-          const y2 = margin.top + (k + 1) * (height - margin.top - margin.bottom) / 4;
-          
-          svg.append("line")
-            .attr("x1", x1)
-            .attr("y1", y1)
-            .attr("x2", x2)
-            .attr("y2", y2)
-            .attr("stroke", "#8B4513")
-            .attr("stroke-width", 1)
-            .attr("opacity", 0.4);
+      const x1 = (i + 0.5) * layerWidth;
+      const x2 = (i + 1.5) * layerWidth;
+      
+      for (let j = 0; j < 3; j++) {
+        const y1 = centerY - 30 + j * 30;
+        for (let k = 0; k < 3; k++) {
+          const y2 = centerY - 30 + k * 30;
+          ctx.beginPath();
+          ctx.moveTo(x1, y1);
+          ctx.lineTo(x2, y2);
+          ctx.stroke();
         }
       }
     }
-
-    // Draw nodes
-    layers.forEach((nodeCount, layerIndex) => {
-      const x = margin.left + layerIndex * layerWidth;
+    
+    // Draw layers
+    layers.forEach((layer, index) => {
+      const x = (index + 0.5) * layerWidth;
       
-      let nodeColor;
-      if (layerIndex === 0) nodeColor = "#FFD700";
-      else if (layerIndex === layers.length - 1) nodeColor = "#FF6B6B";
-      else nodeColor = "#00CED1";
-      
-      for (let nodeIndex = 0; nodeIndex < Math.min(3, nodeCount); nodeIndex++) {
-        const y = margin.top + (nodeIndex + 1) * (height - margin.top - margin.bottom) / 4;
-        
-        const circle = svg.append("circle")
-          .attr("cx", x)
-          .attr("cy", y)
-          .attr("r", 0)
-          .attr("fill", nodeColor)
-          .attr("stroke", "#8B4513")
-          .attr("stroke-width", 2);
-
-        // Animate node appearance
-        circle.transition()
-          .delay(layerIndex * 200 + nodeIndex * 50)
-          .duration(500)
-          .attr("r", 8);
+      // Draw neurons
+      ctx.fillStyle = layer.color;
+      for (let i = 0; i < 3; i++) {
+        const y = centerY - 30 + i * 30;
+        ctx.beginPath();
+        ctx.arc(x, y, 8, 0, 2 * Math.PI);
+        ctx.fill();
       }
-
-      // Add layer labels
-      svg.append("text")
-        .attr("x", x)
-        .attr("y", height - 20)
-        .attr("text-anchor", "middle")
-        .attr("fill", "#FFD700")
-        .style("font-size", "11px")
-        .style("font-weight", "bold")
-        .text(layerNames[layerIndex]);
       
-      // Add node count
-      svg.append("text")
-        .attr("x", x)
-        .attr("y", 25)
-        .attr("text-anchor", "middle")
-        .attr("fill", "#D2B48C")
-        .style("font-size", "10px")
-        .text(nodeCount);
-    });
-
-    // Add title
-    svg.append("text")
-      .attr("x", width / 2)
-      .attr("y", 15)
-      .attr("text-anchor", "middle")
-      .attr("fill", "#FFD700")
-      .style("font-size", "16px")
-      .style("font-weight", "bold")
-      .text("DQN Neural Network Architecture");
-    
-    // Add parameter information
-    const parameterInfo = [
-      { label: "Total Parameters", value: "~450k" },
-      { label: "Input Features", value: "112" },
-      { label: "Output Actions", value: "147" },
-      { label: "Hidden Layers", value: "4" },
-      { label: "Activation", value: "ReLU" },
-      { label: "Loss Function", value: "Huber" }
-    ];
-    
-    const paramY = height - 80;
-    parameterInfo.forEach((param, index) => {
-      const x = margin.left + (index * (width - margin.left - margin.right) / (parameterInfo.length - 1));
-      
-      // Parameter box
-      svg.append("rect")
-        .attr("x", x - 40)
-        .attr("y", paramY)
-        .attr("width", 80)
-        .attr("height", 40)
-        .attr("fill", "rgba(139, 69, 19, 0.3)")
-        .attr("stroke", "#8B4513")
-        .attr("stroke-width", 1)
-        .attr("rx", 5);
-      
-      // Parameter label
-      svg.append("text")
-        .attr("x", x)
-        .attr("y", paramY + 12)
-        .attr("text-anchor", "middle")
-        .attr("fill", "#FFD700")
-        .style("font-size", "10px")
-        .style("font-weight", "bold")
-        .text(param.label);
-      
-      // Parameter value
-      svg.append("text")
-        .attr("x", x)
-        .attr("y", paramY + 28)
-        .attr("text-anchor", "middle")
-        .attr("fill", "#D2B48C")
-        .style("font-size", "12px")
-        .style("font-weight", "bold")
-        .text(param.value);
+      // Draw layer label
+      ctx.fillStyle = '#FFD700';
+      ctx.font = '12px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText(layer.name, x, centerY + 60);
+      ctx.fillText(layer.neurons, x, centerY + 75);
     });
     
-    // Add model state indicator
-    const modelState = trainingStats && trainingStats.episode > 0 ? "Trained" : "Untrained";
-    const stateColor = modelState === "Trained" ? "#28a745" : "#ffc107";
+    // Title
+    ctx.fillStyle = '#FFD700';
+    ctx.font = 'bold 16px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText(`${trainingStats.algorithm} Architecture`, canvas.width / 2, 25);
     
-    svg.append("circle")
-      .attr("cx", width - 50)
-      .attr("cy", 30)
-      .attr("r", 8)
-      .attr("fill", stateColor)
-      .attr("stroke", "#8B4513")
-      .attr("stroke-width", 2);
+    // Status indicators
+    const indicators = [];
     
-    svg.append("text")
-      .attr("x", width - 50)
-      .attr("y", 50)
-      .attr("text-anchor", "middle")
-      .attr("fill", stateColor)
-      .style("font-size", "12px")
-      .style("font-weight", "bold")
-      .text(modelState);
+    if (trainingStats.supportsTraining) {
+      indicators.push({
+        text: `Training: ${isTraining ? 'ACTIVE' : 'STOPPED'}`,
+        color: isTraining ? '#4CAF50' : '#F44336'
+      });
+    }
+    
+    if (trainingStats.epsilon !== undefined) {
+      indicators.push({
+        text: `Exploration: ${(trainingStats.epsilon * 100).toFixed(1)}%`,
+        color: '#2196F3'
+      });
+    }
+    
+    if (trainingStats.avgDecisionTime !== undefined) {
+      indicators.push({
+        text: `Decision: ${trainingStats.avgDecisionTime.toFixed(1)}ms`,
+        color: '#FF9800'
+      });
+    }
+    
+    indicators.forEach((indicator, index) => {
+      ctx.fillStyle = indicator.color;
+      ctx.font = '10px Arial';
+      ctx.textAlign = 'left';
+      ctx.fillText(indicator.text, 10, canvas.height - 30 + index * 12);
+    });
   };
 
   const getMovingAverage = (data, windowSize = 10) => {
-    if (!data || data.length < windowSize) return [];
+    if (data.length < windowSize) return [];
     
     const result = [];
     for (let i = windowSize - 1; i < data.length; i++) {
@@ -540,266 +494,285 @@ function AIVisualization({ trainingStats, isTraining }) {
   };
 
   const formatNumber = (num) => {
-    if (typeof num !== 'number') return '0';
-    if (num >= 1000) return (num / 1000).toFixed(1) + 'k';
-    return num.toFixed(2);
+    if (typeof num !== 'number' || isNaN(num)) return '0';
+    
+    if (Math.abs(num) >= 1000000) {
+      return (num / 1000000).toFixed(1) + 'M';
+    } else if (Math.abs(num) >= 1000) {
+      return (num / 1000).toFixed(1) + 'K';
+    } else if (Math.abs(num) >= 1) {
+      return num.toFixed(1);
+    } else {
+      return num.toFixed(3);
+    }
   };
 
+  // Algorithm-specific performance indicators
   const getPerformanceIndicator = () => {
-    if (!trainingStats.rewards || trainingStats.rewards.length < 10) {
-      return { color: '#808080', text: 'Collecting data...' };
+    if (!trainingStats || !trainingStats.algorithm) return { text: 'Unknown', color: '#666' };
+    
+    const algorithm = trainingStats.algorithm;
+    
+    if (algorithm.includes('DQN')) {
+      const avgScore = trainingStats.avgScore || 0;
+      if (avgScore > 1000) return { text: 'Excellent', color: '#4CAF50' };
+      if (avgScore > 500) return { text: 'Good', color: '#8BC34A' };
+      if (avgScore > 100) return { text: 'Learning', color: '#FFC107' };
+      return { text: 'Training', color: '#FF9800' };
+    } else if (algorithm.includes('MCTS')) {
+      const avgDecisionTime = trainingStats.avgDecisionTime || 0;
+      if (avgDecisionTime < 100) return { text: 'Fast', color: '#4CAF50' };
+      if (avgDecisionTime < 500) return { text: 'Normal', color: '#8BC34A' };
+      return { text: 'Slow', color: '#FF9800' };
+    } else if (algorithm.includes('Heuristic')) {
+      const avgDecisionTime = trainingStats.avgDecisionTime || 0;
+      if (avgDecisionTime < 50) return { text: 'Instant', color: '#4CAF50' };
+      return { text: 'Fast', color: '#8BC34A' };
+    } else if (algorithm.includes('Policy')) {
+      const avgLoss = trainingStats.avgLoss || 0;
+      if (avgLoss < 0.1) return { text: 'Converged', color: '#4CAF50' };
+      if (avgLoss < 0.5) return { text: 'Learning', color: '#FFC107' };
+      return { text: 'Training', color: '#FF9800' };
     }
     
-    const recentRewards = trainingStats.rewards.slice(-10);
-    const avgReward = recentRewards.reduce((a, b) => a + b, 0) / recentRewards.length;
-    
-    if (avgReward > 500) {
-      return { color: '#28a745', text: 'Excellent' };
-    } else if (avgReward > 200) {
-      return { color: '#ffc107', text: 'Good' };
-    } else if (avgReward > 0) {
-      return { color: '#fd7e14', text: 'Learning' };
-    } else {
-      return { color: '#dc3545', text: 'Poor' };
-    }
+    return { text: 'Active', color: '#2196F3' };
   };
 
-  const performance = getPerformanceIndicator();
-
-  // Real-time learning indicator
   const getLearningIndicator = () => {
-    if (!trainingStats.rewards || trainingStats.rewards.length < 5) {
-      return { color: '#808080', text: 'Initializing...', trend: '⏳' };
+    if (!trainingStats.supportsTraining) return null;
+    
+    if (trainingStats.losses && trainingStats.losses.length > 10) {
+      const recentLosses = trainingStats.losses.slice(-10);
+      const trend = recentLosses[recentLosses.length - 1] - recentLosses[0];
+      
+      if (trend < -0.01) return { text: 'Improving', color: '#4CAF50' };
+      if (trend > 0.01) return { text: 'Diverging', color: '#F44336' };
+      return { text: 'Stable', color: '#FFC107' };
     }
     
-    const recentRewards = trainingStats.rewards.slice(-5);
-    const trend = recentRewards[recentRewards.length - 1] - recentRewards[0];
-    
-    if (trend > 50) {
-      return { color: '#28a745', text: 'Learning Fast!', trend: '📈' };
-    } else if (trend > 10) {
-      return { color: '#ffc107', text: 'Improving', trend: '📊' };
-    } else if (trend > -10) {
-      return { color: '#fd7e14', text: 'Stable', trend: '➡️' };
-    } else {
-      return { color: '#dc3545', text: 'Struggling', trend: '📉' };
-    }
+    return { text: 'Learning', color: '#2196F3' };
   };
 
-  // Calculate learning speed
   const getLearningSpeed = () => {
-    if (!trainingStats.rewards || trainingStats.rewards.length < 10) return 'N/A';
+    if (!trainingStats.episode || trainingStats.episode < 10) return null;
     
-    const recent = trainingStats.rewards.slice(-10);
-    const older = trainingStats.rewards.slice(-20, -10);
-    
-    if (older.length === 0) return 'N/A';
-    
-    const recentAvg = recent.reduce((a, b) => a + b, 0) / recent.length;
-    const olderAvg = older.reduce((a, b) => a + b, 0) / older.length;
-    
-    const improvement = ((recentAvg - olderAvg) / Math.abs(olderAvg)) * 100;
-    
-    if (improvement > 10) return 'Fast';
-    if (improvement > 3) return 'Moderate';
-    if (improvement > -3) return 'Slow';
-    return 'Negative';
+    if (trainingStats.episode < 50) return { text: 'Starting', color: '#FF9800' };
+    if (trainingStats.episode < 200) return { text: 'Training', color: '#2196F3' };
+    if (trainingStats.episode < 500) return { text: 'Learning', color: '#9C27B0' };
+    return { text: 'Experienced', color: '#4CAF50' };
   };
 
+  if (!trainingStats || Object.keys(trainingStats).length === 0) {
+    return (
+      <div className="ai-visualization" style={{
+        background: 'rgba(139, 69, 19, 0.2)',
+        padding: '20px',
+        borderRadius: '10px',
+        border: '2px solid #8B4513',
+        textAlign: 'center'
+      }}>
+        <h4 style={{ color: '#FFD700', marginBottom: '10px' }}>🤖 AI Visualization</h4>
+        <p style={{ color: '#D2B48C' }}>No training data available yet. Start training to see visualizations!</p>
+      </div>
+    );
+  }
+
+  const performanceIndicator = getPerformanceIndicator();
   const learningIndicator = getLearningIndicator();
   const learningSpeed = getLearningSpeed();
 
   return (
-    <div className="ai-visualization">
-      <h4>📊 Neural Network Training Progress</h4>
-      
-      {trainingStats && trainingStats.rewards && trainingStats.rewards.length > 0 ? (
-        <div className="viz-container">
-          <div className="chart-section">
-            <h5>Reward & Exploration Progress</h5>
-            <div ref={chartRef} className="chart-container"></div>
-          </div>
+    <div className="ai-visualization" style={{
+      background: 'rgba(139, 69, 19, 0.2)',
+      padding: '20px',
+      borderRadius: '10px',
+      border: '2px solid #8B4513'
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+        <h4 style={{ color: '#FFD700', margin: 0 }}>
+          🤖 {trainingStats.algorithm || 'AI'} Visualization
+        </h4>
+        
+        <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
+          <div style={{
+            padding: '4px 8px',
+            borderRadius: '12px',
+            background: performanceIndicator.color,
+            color: 'white',
+            fontSize: '12px',
+            fontWeight: 'bold'
+          }}>
+            {performanceIndicator.text}
+            </div>
           
-          <div className="chart-section">
-            <h5>Training Loss</h5>
-            <div ref={lossChartRef} className="chart-container"></div>
+          {learningIndicator && (
+            <div style={{
+              padding: '4px 8px',
+              borderRadius: '12px',
+              background: learningIndicator.color,
+              color: 'white',
+              fontSize: '12px',
+              fontWeight: 'bold'
+            }}>
+              {learningIndicator.text}
+              </div>
+            )}
+            
+          {learningSpeed && (
+            <div style={{
+              padding: '4px 8px',
+              borderRadius: '12px',
+              background: learningSpeed.color,
+              color: 'white',
+              fontSize: '12px',
+              fontWeight: 'bold'
+            }}>
+              {learningSpeed.text}
+              </div>
+            )}
           </div>
         </div>
-      ) : (
+
+      {/* Algorithm-specific stats */}
         <div style={{ 
-          textAlign: 'center', 
-          padding: '40px',
-          background: 'rgba(139, 69, 19, 0.2)',
-          borderRadius: '10px',
-          border: '1px solid #8B4513',
-          margin: '20px 0'
-        }}>
-          <div style={{ fontSize: '48px', marginBottom: '20px' }}>📊</div>
-          <h3 style={{ color: '#FFD700', marginBottom: '10px' }}>Ready to Visualize Training</h3>
-          <p style={{ color: '#D2B48C', fontSize: '16px', marginBottom: '20px' }}>
-            Start training to see real-time learning progress!
-          </p>
-          <div style={{ 
-            display: 'grid', 
-            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-            gap: '15px',
-            marginTop: '20px'
-          }}>
-            <div style={{ 
-              background: 'rgba(139, 69, 19, 0.3)',
-              padding: '15px',
-              borderRadius: '8px',
-              border: '1px solid #8B4513'
-            }}>
-              <div style={{ color: '#FFD700', fontWeight: 'bold', marginBottom: '5px' }}>📈 Reward Charts</div>
-              <div style={{ color: '#D2B48C', fontSize: '12px' }}>Track AI performance over episodes</div>
-            </div>
-            <div style={{ 
-              background: 'rgba(139, 69, 19, 0.3)',
-              padding: '15px',
-              borderRadius: '8px',
-              border: '1px solid #8B4513'
-            }}>
-              <div style={{ color: '#FFD700', fontWeight: 'bold', marginBottom: '5px' }}>🧠 Learning Speed</div>
-              <div style={{ color: '#D2B48C', fontSize: '12px' }}>Monitor real-time learning progress</div>
-            </div>
-            <div style={{ 
-              background: 'rgba(139, 69, 19, 0.3)',
-              padding: '15px',
-              borderRadius: '8px',
-              border: '1px solid #8B4513'
-            }}>
-              <div style={{ color: '#FFD700', fontWeight: 'bold', marginBottom: '5px' }}>🎮 Visual Training</div>
-              <div style={{ color: '#D2B48C', fontSize: '12px' }}>Watch AI play on the game board</div>
-            </div>
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+        gap: '15px',
+        marginBottom: '20px'
+      }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ color: '#D2B48C', fontSize: '12px' }}>Episodes</div>
+          <div style={{ color: '#FFD700', fontSize: '18px', fontWeight: 'bold' }}>
+            {trainingStats.episode || 0}
           </div>
+        </div>
+        
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ color: '#D2B48C', fontSize: '12px' }}>Best Score</div>
+          <div style={{ color: '#4CAF50', fontSize: '18px', fontWeight: 'bold' }}>
+            {formatNumber(trainingStats.bestScore || 0)}
+          </div>
+        </div>
+        
+        {trainingStats.avgScore !== undefined && (
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ color: '#D2B48C', fontSize: '12px' }}>Avg Score</div>
+            <div style={{ color: '#2196F3', fontSize: '18px', fontWeight: 'bold' }}>
+              {formatNumber(trainingStats.avgScore)}
+            </div>
         </div>
       )}
 
-      <div className="network-section">
-        <h5>Neural Network Architecture</h5>
-        <div ref={networkVisualizationRef} className="network-container"></div>
+        {trainingStats.avgDecisionTime !== undefined && (
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ color: '#D2B48C', fontSize: '12px' }}>Decision Time</div>
+            <div style={{ color: '#FF9800', fontSize: '18px', fontWeight: 'bold' }}>
+              {trainingStats.avgDecisionTime.toFixed(1)}ms
       </div>
+          </div>
+        )}
         
-      <div className="performance-metrics">
-        <div className="metric-card">
-          <div className="metric-title">Performance</div>
-          <div 
-            className="metric-value"
-            style={{ color: performance.color }}
-          >
-            {performance.text}
+        {trainingStats.avgLoss !== undefined && (
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ color: '#D2B48C', fontSize: '12px' }}>Training Loss</div>
+            <div style={{ color: '#F44336', fontSize: '18px', fontWeight: 'bold' }}>
+              {formatNumber(trainingStats.avgLoss)}
           </div>
         </div>
+        )}
         
-        {trainingStats.rewards && (
-          <div className="metric-card">
-            <div className="metric-title">Avg Reward (Last 10)</div>
-            <div className="metric-value">
-              {formatNumber(getMovingAverage(trainingStats.rewards, 10).slice(-1)[0] || 0)}
+        {trainingStats.memorySize !== undefined && trainingStats.memorySize > 0 && (
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ color: '#D2B48C', fontSize: '12px' }}>Memory</div>
+            <div style={{ color: '#9C27B0', fontSize: '18px', fontWeight: 'bold' }}>
+              {trainingStats.memorySize}
             </div>
           </div>
         )}
         
-        <div className="metric-card">
-          <div className="metric-title">Learning Speed</div>
-          <div 
-            className="metric-value"
-            style={{ 
-              color: learningSpeed === 'Fast' ? '#28a745' : 
-                     learningSpeed === 'Moderate' ? '#ffc107' : 
-                     learningSpeed === 'Slow' ? '#fd7e14' : '#dc3545' 
-            }}
-          >
-            {learningSpeed}
-          </div>
-        </div>
-        
-        <div className="metric-card">
-          <div className="metric-title">Exploration Rate</div>
-          <div className="metric-value">
-            {((trainingStats.epsilon || 0) * 100).toFixed(1)}%
-          </div>
-        </div>
-        
-        {trainingStats.avgLoss && (
-          <div className="metric-card">
-            <div className="metric-title">Training Loss</div>
-            <div className="metric-value">
-              {trainingStats.avgLoss.toFixed(4)}
+        {trainingStats.epsilon !== undefined && (
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ color: '#D2B48C', fontSize: '12px' }}>Exploration</div>
+            <div style={{ color: '#00BCD4', fontSize: '18px', fontWeight: 'bold' }}>
+              {(trainingStats.epsilon * 100).toFixed(1)}%
             </div>
           </div>
         )}
       </div>
-      
-      {isTraining && (
-        <div className="training-status">
-          <div className="status-indicator pulsing"></div>
-          <span>Neural network is actively learning...</span>
-        </div>
-      )}
-      
-      {/* Real-time Learning Status */}
-      {isTraining && (
-        <div style={{ 
-          background: 'rgba(40, 167, 69, 0.2)', 
-          padding: '15px', 
+
+      {/* Charts */}
+      {!showOnlyNetwork && (
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: compact ? '1fr' : 'repeat(auto-fit, minmax(300px, 1fr))',
+          gap: '20px',
+          marginBottom: '20px'
+        }}>
+          {trainingStats.scores && trainingStats.scores.length > 0 && (
+            <div style={{
+              background: 'rgba(0, 0, 0, 0.3)',
           borderRadius: '8px', 
-          marginBottom: '20px',
-          border: '1px solid #28a745',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center'
+              padding: '10px',
+              border: '1px solid #8B4513'
+            }}>
+              <div ref={scoreChartRef} />
+          </div>
+          )}
+          
+          {trainingStats.rewards && trainingStats.rewards.length > 0 && (
+            <div style={{
+              background: 'rgba(0, 0, 0, 0.3)',
+          borderRadius: '8px', 
+              padding: '10px',
+              border: '1px solid #8B4513'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span style={{ fontSize: '24px' }}>{learningIndicator.trend}</span>
-            <div>
-              <div style={{ color: learningIndicator.color, fontWeight: 'bold', fontSize: '16px' }}>
-                {learningIndicator.text}
-              </div>
-              <div style={{ fontSize: '12px', color: '#D2B48C' }}>
-                Learning Speed: {learningSpeed}
-              </div>
-            </div>
+              <div ref={rewardChartRef} />
           </div>
-          <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: '12px', color: '#D2B48C' }}>Last Update</div>
-            <div style={{ fontSize: '14px', color: '#28a745' }}>
-              {new Date(lastUpdateTime).toLocaleTimeString()}
-            </div>
+          )}
+          
+          {trainingStats.losses && trainingStats.losses.length > 0 && trainingStats.supportsTraining && (
+            <div style={{
+              background: 'rgba(0, 0, 0, 0.3)',
+            borderRadius: '8px', 
+              padding: '10px',
+              border: '1px solid #8B4513'
+          }}>
+              <div ref={lossChartRef} />
           </div>
+        )}
+      </div>
+      )}
+
+      {/* Network Architecture */}
+      {(trainingStats.algorithm?.includes('DQN') || trainingStats.algorithm?.includes('Policy')) && (
+        <div style={{
+          background: 'rgba(0, 0, 0, 0.3)',
+          borderRadius: '8px', 
+          padding: '10px',
+          border: '1px solid #8B4513',
+          textAlign: 'center'
+        }}>
+          <div ref={networkRef} />
         </div>
       )}
       
-      <div className="viz-tips">
-        <h5>💡 What to Watch During Training:</h5>
-        <ul>
-          <li><strong>📈 Learning Fast! / 📊 Improving:</strong> The AI is successfully learning new strategies</li>
-          <li><strong>➡️ Stable:</strong> AI has learned a strategy and is refining it</li>
-          <li><strong>📉 Struggling:</strong> AI is having difficulty - consider more training episodes</li>
-          <li><strong>Gold Line Rising:</strong> Episode rewards trending up = AI getting better at the game</li>
-          <li><strong>Cyan Line Falling:</strong> Exploration rate decreasing = AI becoming more confident</li>
-          <li><strong>Loss Chart Converging:</strong> Neural network training stabilizing = good learning</li>
-          <li><strong>Learning Speed: Fast/Moderate:</strong> AI is actively improving its performance</li>
-        </ul>
-        
+      {/* Algorithm-specific info */}
         <div style={{ 
-          marginTop: '15px', 
-          padding: '10px', 
-          background: 'rgba(255, 215, 0, 0.1)', 
-          borderRadius: '5px',
-          border: '1px solid #FFD700'
-        }}>
-          <strong style={{ color: '#FFD700' }}>🎯 Training Tips:</strong>
-          <ul style={{ marginTop: '8px', fontSize: '11px' }}>
-            <li>Start with <strong>100-500 episodes</strong> for initial learning</li>
-            <li>Look for <strong>upward trending rewards</strong> as a sign of progress</li>
-            <li>If performance plateaus, try <strong>1000+ episodes</strong> for refinement</li>
-            <li>Good performance: average rewards above <strong>200 points</strong></li>
-            <li>The visualization updates <strong>every 5 episodes</strong> for real-time progress</li>
-          </ul>
-        </div>
-      </div>
+        marginTop: '15px',
+        padding: '10px',
+        background: 'rgba(255, 215, 0, 0.1)',
+        borderRadius: '5px',
+        border: '1px solid #FFD700'
+      }}>
+        <div style={{ color: '#FFD700', fontSize: '12px', fontWeight: 'bold', marginBottom: '5px' }}>
+          Algorithm: {trainingStats.algorithm || 'Unknown'}
+              </div>
+        <div style={{ color: '#D2B48C', fontSize: '11px' }}>
+          {trainingStats.supportsTraining ? '🎓 Supports Training' : '🚀 No Training Required'} | 
+          {trainingStats.supportsVisualization ? ' 📊 Full Visualization' : ' 📈 Basic Stats'}
+          {trainingStats.trainingSteps > 0 && ` | ${trainingStats.trainingSteps} Training Steps`}
+              </div>
+            </div>
     </div>
   );
 }

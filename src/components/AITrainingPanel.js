@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { DQNAgent } from '../ai/DQNAgent';
-import { DQNEnvironment } from '../ai/DQNEnvironment';
+import * as tf from '@tensorflow/tfjs';
+import { EliteDQNAgent } from '../ai/EliteDQNAgent';
+import { EliteEnvironment } from '../ai/EliteEnvironment';
 import { runAITests } from '../ai/AITestRunner';
 import AIVisualization from './AIVisualization';
 import { generateRandomBlocks, checkGameOver } from '../utils/gameLogic';
@@ -19,9 +20,9 @@ function AITrainingPanel({
   const [isTraining, setIsTraining] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [trainingStats, setTrainingStats] = useState({});
-  const [trainingEpisodes, setTrainingEpisodes] = useState(1000);
+  const [trainingEpisodes, setTrainingEpisodes] = useState(2000); // More episodes for elite training
   const [autoPlay, setAutoPlay] = useState(false);
-  const [playSpeed, setPlaySpeed] = useState(500);
+  const [playSpeed, setPlaySpeed] = useState(300); // Faster default for elite performance
   const [continuousPlay, setContinuousPlay] = useState(false);
   const [visualTraining, setVisualTraining] = useState(false);
   const [trainingGrid, setTrainingGrid] = useState([]);
@@ -36,41 +37,60 @@ function AITrainingPanel({
   const stepRef = useRef(0);
 
   useEffect(() => {
-    // Initialize AI components with EXPERT enhancements
-    const env = new DQNEnvironment();
-    const dqnAgent = new DQNAgent(env.getStateSize(), env.getMaxActionSpace(), {
-      learningRate: 0.0003, // EXPERT: Lower for stability
-      epsilon: 0.95, // EXPERT: Higher initial exploration
-      epsilonMin: 0.02, // EXPERT: Lower minimum for exploitation
-      epsilonDecay: 0.9995, // EXPERT: Slower decay for thorough exploration
-      gamma: 0.98, // EXPERT: Higher discount for long-term planning
-      batchSize: 128, // EXPERT: Larger batch for stability
-      memorySize: 25000, // EXPERT: Larger memory for diverse experiences
-      targetUpdateFreq: 200 // EXPERT: Less frequent for stability
+    // Initialize ELITE AI components
+    console.log('🚀 Initializing ELITE AI SYSTEM...');
+    
+    const eliteEnv = new EliteEnvironment();
+    console.log(`📊 Elite Environment initialized - State size: ${eliteEnv.getStateSize()}`);
+    
+    const eliteAgent = new EliteDQNAgent(eliteEnv.getStateSize(), eliteEnv.getMaxActionSpace(), {
+      learningRate: 0.0003,     // ELITE: Lower for stability
+      epsilon: 1.0,             // ELITE: Start with full exploration
+      epsilonMin: 0.01,         // ELITE: Minimal exploitation
+      epsilonDecay: 0.9995,     // ELITE: Slower decay for better exploration
+      gamma: 0.99,              // ELITE: High discount for long-term planning
+      batchSize: 64,            // ELITE: Larger batch for stability
+      memorySize: 20000,        // ELITE: Larger memory for diversity
+      targetUpdateFreq: 100,    // ELITE: Less frequent for stability
+      alpha: 0.6,               // ELITE: Prioritization exponent
+      beta: 0.4,                // ELITE: Importance sampling exponent
+      nStep: 3                  // ELITE: Multi-step learning
     });
     
-    setEnvironment(env);
-    setAgent(dqnAgent);
+    console.log('🧠 Elite DQN Agent initialized with:');
+    console.log('  - Double DQN for stable learning');
+    console.log('  - Dueling architecture for better value estimation');
+    console.log('  - Prioritized experience replay');
+    console.log('  - Advanced exploration strategies');
+    console.log('  - Sophisticated reward shaping');
+    
+    setEnvironment(eliteEnv);
+    setAgent(eliteAgent);
     
     return () => {
-      if (dqnAgent) dqnAgent.dispose();
+      if (eliteAgent) eliteAgent.dispose();
     };
   }, []);
 
   const startTraining = async () => {
     if (!agent || !environment || isTraining) return;
     
+    console.log('🚀 Starting ELITE TRAINING SESSION...');
+    console.log(`📈 Target episodes: ${trainingEpisodes}`);
+    console.log(`🎯 Objective: MAXIMIZE SCORE with elite strategies`);
+    console.log(`💎 Features: Double DQN + Dueling + Prioritized Replay + Advanced Rewards`);
+    
     setIsTraining(true);
     episodeRef.current = 0;
     
     trainingIntervalRef.current = setInterval(async () => {
-      await runTrainingEpisode();
+      await runEliteTrainingEpisode();
       episodeRef.current++;
       
       if (episodeRef.current >= trainingEpisodes) {
         stopTraining();
       }
-    }, visualTraining ? 100 : 10); // Slower when visual training is enabled
+    }, visualTraining ? 50 : 10); // Much faster training for elite system
   };
 
   const stopTraining = () => {
@@ -79,17 +99,25 @@ function AITrainingPanel({
       clearInterval(trainingIntervalRef.current);
       trainingIntervalRef.current = null;
     }
+    
+    console.log('🏁 ELITE TRAINING SESSION COMPLETED');
+    if (agent) {
+      const stats = agent.getStats();
+      console.log(`🏆 Final Performance: Best Score: ${stats.bestScore}, Avg Score: ${stats.avgScore?.toFixed(1)}`);
+      console.log(`📊 Training Summary: ${stats.episode} episodes, ${stats.lineClearingCount} line clears`);
+    }
   };
 
-  const runTrainingEpisode = async () => {
+  const runEliteTrainingEpisode = async () => {
     if (!agent || !environment) return;
     
+    try {
     // Reset environment for new episode
     environment.reset();
-    environment.availableBlocks = generateRandomBlocks();
+    environment.availableBlocks = environment.generateCurriculumBlocks();
     environment.difficulty = difficulty;
     
-    // Update visual training state
+      // Update visual training state
     if (visualTraining) {
       setTrainingGrid(environment.grid.map(row => [...row]));
       setTrainingBlocks(environment.availableBlocks.map(block => block.map(row => [...row])));
@@ -103,10 +131,9 @@ function AITrainingPanel({
     let state = environment.getState();
     let done = false;
     let stepCount = 0;
-    const maxSteps = 150; // EXPERT: Increased max steps for complex strategies
+      const maxSteps = 150; // More steps for elite performance
     
     while (!done && stepCount < maxSteps) {
-      // EXPERT ENHANCEMENT: Use hybrid action selection
       const validActions = environment.getValidActions();
       
       if (validActions.length === 0) {
@@ -114,29 +141,24 @@ function AITrainingPanel({
         break;
       }
       
-      const action = await agent.act(state, validActions);
+        // ELITE ACTION SELECTION with sophisticated strategies
+      const action = await agent.act(state, validActions, environment);
       const stepResult = environment.step(action);
       
-      // EXPERT ENHANCEMENT: Store successful patterns for meta-learning
-      if (stepResult.reward > 200) {
-        environment.storeSuccessfulPattern(environment.grid, stepResult.reward);
-      } else if (stepResult.reward < -150) {
-        environment.storeFailedPattern(environment.grid, stepResult.reward);
-      }
-      
-      // Visual feedback for training
+        // Visual feedback for training
       if (visualTraining) {
         setTrainingGrid(environment.grid.map(row => [...row]));
         setEpisodeScore(environment.score);
         setEpisodeSteps(stepCount + 1);
         stepRef.current = stepCount + 1;
         
-        // EXPERT: Reduced delay for faster visual training
-        if (visualTraining) {
-          await new Promise(resolve => setTimeout(resolve, 5));
+          // Faster visual updates for elite system
+          if (visualTraining && stepCount % 5 === 0) {
+            await new Promise(resolve => setTimeout(resolve, 5));
+          }
         }
-      }
-      
+        
+        // Store experience in prioritized replay buffer
       agent.remember(
         state,
         action,
@@ -149,115 +171,94 @@ function AITrainingPanel({
       done = stepResult.done;
       stepCount++;
       
-      // EXPERT ENHANCEMENT: More frequent training for better learning
-      if (agent.memory.length > agent.batchSize && stepCount % 2 === 0) {
+        // ELITE TRAINING: More frequent updates for faster learning
+        if (agent.memory.length > agent.batchSize && stepCount % 2 === 0) {
         await agent.replay();
       }
       
-      // Add new blocks when tray is empty and check for game over
+      // Add new blocks when tray is empty
       if (environment.availableBlocks.length === 0 && !done) {
-        environment.availableBlocks = generateRandomBlocks();
-        done = checkGameOver(environment.grid, environment.availableBlocks, environment.difficulty);
+        environment.availableBlocks = environment.generateCurriculumBlocks();
+          done = environment.checkGameOver();
         if (visualTraining) {
           setTrainingBlocks(environment.availableBlocks.map(block => block.map(row => [...row])));
         }
       }
     }
     
-    agent.endEpisode(0, environment.score);
+      // End episode with elite curriculum management
+    agent.endEpisode(0, environment.score, environment);
     
-    // Update stats more frequently for better visualization - every 3 episodes for expert tracking
-    if (episodeRef.current % 3 === 0) {
+      // Update curriculum based on performance
+      environment.updateCurriculum(
+        environment.lineClearsThisEpisode || 0, 
+        environment.score
+      );
+      
+      // Update stats every episode for real-time monitoring
       const newStats = agent.getStats();
+      newStats.curriculumLevel = environment.curriculumLevel;
+      newStats.currentGridSize = environment.currentGridSize;
+      newStats.lineClearsThisEpisode = environment.lineClearsThisEpisode || 0;
+      newStats.consecutiveClears = environment.consecutiveClears || 0;
+      newStats.maxConsecutiveClears = environment.maxConsecutiveClears || 0;
+      
       setTrainingStats(newStats);
       
-      // EXPERT: Enhanced logging with curriculum and meta-learning info
-      console.log(`📈 EXPERT Episode ${episodeRef.current}: Reward: ${newStats.totalReward.toFixed(2)}, ` +
-                  `Avg: ${newStats.avgReward.toFixed(2)}, Best Score: ${newStats.bestScore}, ` +
-                  `Epsilon: ${(newStats.epsilon * 100).toFixed(1)}%, Stage: ${newStats.curriculumStage || 0}, ` +
-                  `Meta Patterns: ${newStats.metaPatternsLearned || 0}`);
+      // Enhanced logging for elite performance tracking
+      if (episodeRef.current % 10 === 0 || environment.score > 5000) {
+        console.log(`🚀 ELITE Episode ${episodeRef.current}: Score=${environment.score}, Best=${newStats.bestScore}, ` +
+                    `Avg=${newStats.avgScore?.toFixed(1)}, Lines=${environment.lineClearsThisEpisode || 0}, ` +
+                    `Consecutive=${environment.consecutiveClears || 0}, Level=${environment.curriculumLevel}, ` +
+                    `Epsilon=${(newStats.epsilon * 100).toFixed(1)}%`);
+      }
+      
+    } catch (error) {
+      console.error('🚨 Elite training episode error:', error);
     }
   };
 
   const startAIPlay = async () => {
     if (!agent || !environment) {
-      console.log('🤖 Cannot start AI play: Agent or environment not ready');
-      alert('Please start training first to initialize the AI agent!');
+      console.log('🤖 Cannot start Elite AI play: Agent or environment not ready');
+      alert('Please start training first to initialize the Elite AI agent!');
       return;
     }
     
     if (isPlaying) {
-      console.log('🤖 AI is already playing');
+      console.log('🤖 Elite AI is already playing');
       return;
     }
     
-    // 🔍 VERIFICATION: Confirm we're using the latest AI system
-    console.log('🔍 VERIFYING AI SYSTEM:');
-    console.log(`✅ Agent Type: ${agent.constructor.name}`);
-    console.log(`✅ Environment Type: ${environment.constructor.name}`);
-    console.log(`✅ State Size: ${environment.getStateSize()}`);
-    console.log(`✅ Max Action Space: ${environment.getMaxActionSpace()}`);
-    console.log(`✅ Agent Hyperparameters:`, {
-      learningRate: agent.learningRate,
-      epsilon: agent.epsilon,
-      epsilonMin: agent.epsilonMin,
-      epsilonDecay: agent.epsilonDecay,
-      gamma: agent.gamma,
-      batchSize: agent.batchSize,
-      memorySize: agent.memorySize,
-      targetUpdateFreq: agent.targetUpdateFreq
-    });
-    console.log(`✅ Training Episodes Completed: ${agent.episode}`);
-    console.log(`✅ Best Score Achieved: ${agent.bestScore}`);
-    console.log(`✅ Current Epsilon: ${(agent.epsilon * 100).toFixed(1)}%`);
+    // 🔍 VERIFICATION: Confirm we're using the Elite AI system
+    console.log('🔍 VERIFYING ELITE AI SYSTEM:');
+    console.log(`✅ Agent Type: ${agent.constructor.name} (Elite)`);
+    console.log(`✅ Environment Type: ${environment.constructor.name} (Elite)`);
+    console.log(`✅ State Size: ${environment.getStateSize()} (Expected: 139)`);
+    console.log(`✅ Max Action Space: ${environment.getMaxActionSpace()} (Expected: 243)`);
+    console.log(`✅ Elite Features: ${agent.isElite ? 'CONFIRMED' : 'MISSING'}`);
+    console.log(`✅ Training Episodes: ${agent.episode}`);
+    console.log(`✅ Best Score: ${agent.bestScore}`);
+    console.log(`✅ Current Performance: ${agent.avgScore?.toFixed(1)} avg score`);
     
-    // 🔍 VERIFICATION: Test strategic reward system
-    console.log('🔍 TESTING STRATEGIC REWARD SYSTEM:');
-    try {
-      // Create a test scenario to verify reward calculation
-      const testGrid = Array(9).fill(null).map(() => Array(9).fill(false));
-      const testBlocks = generateRandomBlocks();
-      environment.setState(testGrid, testBlocks, 0, difficulty);
-      
-      // Test if strategic methods exist
-      const hasProximityBonus = typeof environment.calculateProximityBonus === 'function';
-      const hasMaxClearingBonus = typeof environment.calculateMaxClearingPotential === 'function';
-      const hasTargetFocusPenalty = typeof environment.calculateTargetFocusPenalty === 'function';
-      const hasBlockOptimization = typeof environment.calculateBlockOptimizationBonus === 'function';
-      
-      console.log(`✅ Proximity Bonus System: ${hasProximityBonus ? 'ACTIVE' : 'MISSING'}`);
-      console.log(`✅ Max Clearing Potential: ${hasMaxClearingBonus ? 'ACTIVE' : 'MISSING'}`);
-      console.log(`✅ Target Focus Penalties: ${hasTargetFocusPenalty ? 'ACTIVE' : 'MISSING'}`);
-      console.log(`✅ Block Optimization: ${hasBlockOptimization ? 'ACTIVE' : 'MISSING'}`);
-      
-      if (hasProximityBonus && hasMaxClearingBonus && hasTargetFocusPenalty && hasBlockOptimization) {
-        console.log('🎯 STRATEGIC REWARD SYSTEM: FULLY ACTIVE ✅');
-      } else {
-        console.log('⚠️ STRATEGIC REWARD SYSTEM: INCOMPLETE - Some features missing');
-      }
-      
-    } catch (error) {
-      console.log('❌ Error testing strategic reward system:', error);
-    }
-    
-    console.log('🎮 Starting AI play with ENHANCED STRATEGIC SYSTEM...');
+    console.log('🎮 Starting ELITE AI PLAY with advanced strategies...');
     setIsPlaying(true);
     setContinuousPlay(true);
     
     // Set environment to current game state
     try {
       environment.setState(grid, availableBlocks, score, difficulty);
-      console.log('🎮 Environment state updated successfully');
-      console.log(`🎮 Current game state: Score=${score}, Blocks=${availableBlocks.length}, Difficulty=${difficulty}`);
+      console.log('🎮 Elite environment state updated successfully');
+      console.log(`🎮 Current game: Score=${score}, Blocks=${availableBlocks.length}, Difficulty=${difficulty}`);
       
       playIntervalRef.current = setInterval(async () => {
-        await makeAIMove();
+        await makeEliteAIMove();
       }, playSpeed);
       
-      console.log(`🎮 AI play started with ${playSpeed}ms interval`);
-      console.log('🎯 Watch console for STRATEGIC reward breakdowns during play!');
+      console.log(`🎮 Elite AI play started with ${playSpeed}ms interval`);
+      console.log('🏆 Watch the Elite AI demonstrate optimal play strategies!');
     } catch (error) {
-      console.error('🎮 Error starting AI play:', error);
+      console.error('🎮 Error starting Elite AI play:', error);
       setIsPlaying(false);
       setContinuousPlay(false);
     }
@@ -270,92 +271,51 @@ function AITrainingPanel({
       clearInterval(playIntervalRef.current);
       playIntervalRef.current = null;
     }
+    console.log('🛑 Elite AI play stopped');
   };
 
-  const makeAIMove = async () => {
+  const makeEliteAIMove = async () => {
     if (!agent || !environment) {
-      console.log('🤖 AI or environment not ready');
+      console.log('🤖 Elite AI or environment not ready');
       return;
     }
     
     // If game is over, handle based on auto-play setting
     if (gameOver) {
       if (autoPlay) {
-        console.log('🎮 Game over - Auto-restarting in 2 seconds...');
+        console.log('🎮 Game over - Elite AI auto-restarting...');
         setTimeout(() => {
           onResetGame();
-          // The useEffect will restart AI play after game reset
-        }, 2000);
+        }, 1000);
       } else {
-        console.log('🎮 Game over - Stopping AI play');
+        console.log('🎮 Game over - Stopping Elite AI play');
         stopAIPlay();
       }
       return;
     }
     
     try {
-      // Always update environment with current game state before making decisions
+      // Update environment with current game state
       environment.setState(grid, availableBlocks, score, difficulty);
-      console.log(`🤖 Game state updated - Score: ${score}, Blocks: ${availableBlocks.length}`);
       
       const validActions = environment.getValidActions();
-      console.log(`🤖 Found ${validActions.length} valid actions`);
       
-      // If no valid actions, wait for new blocks
       if (validActions.length === 0) {
-        console.log('🤖 No valid moves available - waiting for new blocks...');
+        console.log('🤖 Elite AI: No valid moves available');
         return;
       }
       
-      // 🔍 VERIFICATION: Confirm strategic decision making
-      console.log('🔍 AI STRATEGIC ANALYSIS:');
-      
-      // Test strategic analysis methods
-      try {
-        const completionProgress = environment.getCompletionProgress(environment.grid);
-        console.log(`📊 Completion Progress - Rows: ${completionProgress.rows.toFixed(2)}, Cols: ${completionProgress.cols.toFixed(2)}, Squares: ${completionProgress.squares.toFixed(2)}`);
-        
-        const almostCompleteLines = environment.countAlmostCompleteLines();
-        console.log(`🎯 Almost Complete Lines: ${almostCompleteLines}`);
-        
-        const clearingPotentials = environment.analyzeClearingPotentials();
-        console.log(`⚡ Max Clearing Potential - Rows: ${clearingPotentials.maxRowPotential}, Cols: ${clearingPotentials.maxColPotential}, Squares: ${clearingPotentials.maxSquarePotential}`);
-        
-        const highPotentialAreas = environment.findHighPotentialAreas();
-        console.log(`🎪 High Potential Areas Found: ${highPotentialAreas.length}`);
-        
-      } catch (error) {
-        console.log('⚠️ Strategic analysis error (methods may be simplified):', error.message);
-      }
-      
-      // Get AI action (exploitation only - no exploration during play)
+      // ELITE AI DECISION MAKING
       const state = environment.getState();
-      const action = await agent.predict(state, validActions);
+      const action = await agent.selectBestAction(state, validActions); // Use exploitation only during play
       
       // Execute action in the game
       const { blockIndex, row, col } = environment.decodeAction(action);
-      console.log(`🤖 AI STRATEGIC DECISION: block ${blockIndex} at position (${row}, ${col})`);
       
-      // 🔍 VERIFICATION: Analyze the strategic reasoning behind this move
-      try {
-        const blockShape = availableBlocks[blockIndex];
-        console.log(`🧩 Block shape selected:`, blockShape);
-        
-        // Simulate the move to see what strategic rewards it would generate
-        const oldGrid = environment.grid.map(row => [...row]);
-        const oldScore = environment.score;
-        
-        // This is just for analysis - we'll let the actual game execute the move
-        console.log(`🎯 This move should trigger STRATEGIC reward calculations...`);
-        
-      } catch (error) {
-        console.log('⚠️ Strategic analysis error:', error.message);
-      }
-      
-      // Double-check the action is still valid
       if (blockIndex >= 0 && blockIndex < availableBlocks.length && availableBlocks[blockIndex]) {
         const blockShape = availableBlocks[blockIndex];
-        console.log(`🤖 Executing strategic placement...`);
+        
+        console.log(`🧠 Elite AI DECISION: Block ${blockIndex} at (${row}, ${col}) - Strategic placement`);
         
         // Execute the move in the actual game
         const moveSuccess = onGameStateUpdate({
@@ -366,44 +326,223 @@ function AITrainingPanel({
         });
         
         if (moveSuccess !== false) {
-          console.log(`✅ STRATEGIC MOVE EXECUTED - Watch for reward breakdown in training logs!`);
+          console.log(`✅ ELITE MOVE EXECUTED successfully`);
         } else {
-          console.log(`❌ Move failed to execute - stopping AI play`);
+          console.log(`❌ Elite move failed to execute - stopping AI play`);
           stopAIPlay();
           return;
         }
       } else {
-        console.log(`❌ Invalid block selection: blockIndex=${blockIndex}, availableBlocks.length=${availableBlocks.length}`);
+        console.log(`❌ Elite AI: Invalid block selection`);
       }
       
       // Clean up state tensor
       state.dispose();
       
     } catch (error) {
-      console.error('🤖 AI move error:', error);
-      // Don't stop on errors, just continue
+      console.error('🤖 Elite AI move error:', error);
     }
   };
 
   const saveModel = async () => {
     if (!agent) return;
-    const success = await agent.saveModel(`wood-block-dqn-${difficulty}`);
+    const success = await agent.saveModel(`elite-wood-block-dqn-${difficulty}`);
     if (success) {
-      alert('Model saved successfully!');
+      alert('Elite model saved to browser storage successfully!');
     } else {
-      alert('Failed to save model.');
+      alert('Failed to save Elite model to browser storage.');
     }
   };
 
   const loadModel = async () => {
     if (!agent) return;
-    const success = await agent.loadModel(`wood-block-dqn-${difficulty}`);
+    const success = await agent.loadModel(`elite-wood-block-dqn-${difficulty}`);
     if (success) {
-      alert('Model loaded successfully!');
+      alert('Elite model loaded from browser storage successfully!');
       setTrainingStats(agent.getStats());
     } else {
-      alert('Failed to load model.');
+      alert('Failed to load Elite model from browser storage.');
     }
+  };
+
+  const downloadModel = async () => {
+    if (!agent) {
+      alert('No agent available to download!');
+      return;
+    }
+
+    try {
+      console.log('🔽 Starting Elite model download...');
+      
+      // Generate unique filename with timestamp and difficulty
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('.')[0];
+      const modelName = `elite-wood-block-dqn-${difficulty}-${timestamp}`;
+      
+      // Download the TensorFlow.js model
+      await agent.qNetwork.save(`downloads://${modelName}`);
+      
+      // Create and download the agent state JSON
+      const stats = agent.getStats();
+      const agentState = {
+        difficulty: difficulty,
+        timestamp: timestamp,
+        epsilon: agent.epsilon,
+        episode: agent.episode,
+        trainingStep: agent.trainingStep,
+        rewards: agent.rewards.slice(-1000), // Last 1000 for file size
+        scores: agent.scores.slice(-1000),
+        losses: agent.losses.slice(-500),
+        epsilonHistory: agent.epsilonHistory.slice(-500),
+        bestScore: agent.bestScore,
+        lineClearingHistory: agent.lineClearingHistory.slice(-100),
+        recentLineClearSuccess: agent.recentLineClearSuccess,
+        stateSize: agent.stateSize,
+        actionSize: agent.actionSize,
+        hyperparameters: {
+          learningRate: agent.learningRate,
+          gamma: agent.gamma,
+          batchSize: agent.batchSize,
+          memorySize: agent.memorySize,
+          targetUpdateFreq: agent.targetUpdateFreq,
+          alpha: agent.alpha,
+          beta: agent.beta,
+          nStep: agent.nStep
+        },
+        environmentInfo: {
+          curriculumLevel: environment?.curriculumLevel || 0,
+          currentComplexity: environment?.currentComplexity || 'simple'
+        }
+      };
+
+      // Create and trigger download of agent state
+      const stateBlob = new Blob([JSON.stringify(agentState, null, 2)], {
+        type: 'application/json'
+      });
+      const stateUrl = URL.createObjectURL(stateBlob);
+      const stateLink = document.createElement('a');
+      stateLink.href = stateUrl;
+      stateLink.download = `${modelName}-state.json`;
+      document.body.appendChild(stateLink);
+      stateLink.click();
+      document.body.removeChild(stateLink);
+      URL.revokeObjectURL(stateUrl);
+
+      console.log('✅ Elite model download completed!');
+      alert(`🔽 Elite Model Downloaded Successfully!\n\nFiles saved:\n• ${modelName}.json (model architecture)\n• ${modelName}.bin (model weights)\n• ${modelName}-state.json (training progress)\n\nModel Stats:\n• Episodes: ${stats.episode}\n• Best Score: ${stats.bestScore}\n• Difficulty: ${difficulty.toUpperCase()}`);
+      
+    } catch (error) {
+      console.error('❌ Elite model download error:', error);
+      alert('❌ Failed to download Elite model. Check the browser console for details.');
+    }
+  };
+
+  const uploadModel = async () => {
+    if (!agent) {
+      alert('No agent available to upload to!');
+      return;
+    }
+
+    // Create file input for multiple model files
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.multiple = true;
+    fileInput.accept = '.json,.bin';
+    fileInput.style.display = 'none';
+    
+    fileInput.onchange = async (event) => {
+      const files = Array.from(event.target.files);
+      
+      if (files.length === 0) return;
+
+      try {
+        console.log('🔼 Starting Elite model upload...');
+        console.log('📁 Files selected:', files.map(f => f.name));
+
+        // Find the model files
+        const modelJsonFile = files.find(f => f.name.endsWith('.json') && !f.name.includes('-state'));
+        const modelBinFile = files.find(f => f.name.endsWith('.bin'));
+        const stateJsonFile = files.find(f => f.name.includes('-state.json'));
+
+        if (!modelJsonFile) {
+          alert('❌ Please select the model.json file (main model file)!');
+          return;
+        }
+
+        // Load model using tf.io.browserFiles
+        const modelFiles = [modelJsonFile];
+        if (modelBinFile) {
+          modelFiles.push(modelBinFile);
+        }
+
+        console.log('📊 Loading TensorFlow.js model...');
+        const loadedModel = await tf.loadLayersModel(tf.io.browserFiles(modelFiles));
+        
+        // Replace the current model
+        if (agent.qNetwork) {
+          agent.qNetwork.dispose();
+        }
+        agent.qNetwork = loadedModel;
+        
+        // Update target network to match
+        agent.updateTargetNetwork();
+        
+        console.log('🧠 Model loaded successfully!');
+
+        // Load state file if available
+        if (stateJsonFile) {
+          console.log('📊 Loading agent state...');
+          const stateText = await stateJsonFile.text();
+          const stateData = JSON.parse(stateText);
+          
+          // Restore agent state
+          agent.epsilon = stateData.epsilon || agent.epsilon;
+          agent.episode = stateData.episode || 0;
+          agent.trainingStep = stateData.trainingStep || 0;
+          agent.rewards = stateData.rewards || [];
+          agent.scores = stateData.scores || [];
+          agent.losses = stateData.losses || [];
+          agent.epsilonHistory = stateData.epsilonHistory || [];
+          agent.bestScore = stateData.bestScore || 0;
+          agent.lineClearingHistory = stateData.lineClearingHistory || [];
+          agent.recentLineClearSuccess = stateData.recentLineClearSuccess || 0;
+          
+          // Update environment state if available
+          if (environment && stateData.environmentInfo) {
+            environment.curriculumLevel = stateData.environmentInfo.curriculumLevel || 0;
+            environment.currentComplexity = stateData.environmentInfo.currentComplexity || 'simple';
+          }
+
+          console.log('📊 Agent state restored!');
+        }
+
+        // Update UI with new stats
+        setTrainingStats(agent.getStats());
+
+        const uploadedModelInfo = stateJsonFile ? {
+          episodes: agent.episode,
+          bestScore: agent.bestScore,
+          difficulty: stateJsonFile ? 'Restored from file' : 'Default',
+          curriculumLevel: environment?.curriculumLevel || 0
+        } : {
+          episodes: 'Unknown',
+          bestScore: 'Unknown', 
+          difficulty: 'Model only (no state)',
+          curriculumLevel: 0
+        };
+
+        console.log('✅ Elite model upload completed!');
+        alert(`🔼 Elite Model Uploaded Successfully!\n\nModel restored:\n• Episodes: ${uploadedModelInfo.episodes}\n• Best Score: ${uploadedModelInfo.bestScore}\n• Curriculum Level: ${uploadedModelInfo.curriculumLevel}\n• State: ${stateJsonFile ? 'Fully Restored' : 'Model Only'}\n\nThe AI is ready to continue training or play!`);
+
+      } catch (error) {
+        console.error('❌ Model upload error:', error);
+        alert(`❌ Failed to upload model: ${error.message}\n\nMake sure you selected:\n• model.json (required)\n• model.bin (required for weights)\n• model-state.json (optional, for training progress)`);
+      }
+    };
+
+    // Trigger file selection
+    document.body.appendChild(fileInput);
+    fileInput.click();
+    document.body.removeChild(fileInput);
   };
 
   const resetTraining = () => {
@@ -411,32 +550,37 @@ function AITrainingPanel({
       agent.dispose();
     }
     
-    const env = new DQNEnvironment();
-    const dqnAgent = new DQNAgent(env.getStateSize(), env.getMaxActionSpace(), {
-      learningRate: 0.0003, // EXPERT: Lower for stability
-      epsilon: 0.95, // EXPERT: Higher initial exploration
-      epsilonMin: 0.02, // EXPERT: Lower minimum for exploitation
-      epsilonDecay: 0.9995, // EXPERT: Slower decay for thorough exploration
-      gamma: 0.98, // EXPERT: Higher discount for long-term planning
-      batchSize: 128, // EXPERT: Larger batch for stability
-      memorySize: 25000, // EXPERT: Larger memory for diverse experiences
-      targetUpdateFreq: 200 // EXPERT: Less frequent for stability
+    const eliteEnv = new EliteEnvironment();
+    const eliteAgent = new EliteDQNAgent(eliteEnv.getStateSize(), eliteEnv.getMaxActionSpace(), {
+      learningRate: 0.0003,
+      epsilon: 1.0,
+      epsilonMin: 0.01,
+      epsilonDecay: 0.9995,
+      gamma: 0.99,
+      batchSize: 64,
+      memorySize: 20000,
+      targetUpdateFreq: 100,
+      alpha: 0.6,
+      beta: 0.4,
+      nStep: 3
     });
     
-    setEnvironment(env);
-    setAgent(dqnAgent);
+    setEnvironment(eliteEnv);
+    setAgent(eliteAgent);
     setTrainingStats({});
     episodeRef.current = 0;
+    
+    console.log('🔄 Elite AI system reset successfully');
   };
 
   const runTests = async () => {
-    console.log('🧪 Running AI system tests...');
+    console.log('🧪 Running Elite AI system tests...');
     try {
       const results = await runAITests();
       const allPassed = Object.values(results).every(result => result);
       
       if (allPassed) {
-        alert('✅ All AI tests passed! System is working correctly.');
+        alert('✅ All Elite AI tests passed! System is working optimally.');
       } else {
         alert('❌ Some tests failed. Check the browser console for details.');
       }
@@ -446,117 +590,62 @@ function AITrainingPanel({
     }
   };
 
-  const verifyAISystem = () => {
-    console.log('🔍 ========== EXPERT AI SYSTEM VERIFICATION ==========');
+  const verifyEliteSystem = () => {
+    console.log('🔍 ========== ELITE AI SYSTEM VERIFICATION ==========');
     
     if (!agent || !environment) {
-      console.log('❌ AI System not initialized');
-      alert('❌ AI System not initialized. Please wait for initialization to complete.');
+      console.log('❌ Elite AI System not initialized');
+      alert('❌ Elite AI System not initialized. Please wait for initialization to complete.');
       return;
     }
     
-    // 1. Verify EXPERT Agent Configuration
-    console.log('🤖 EXPERT AGENT VERIFICATION:');
+    // 1. Verify Elite Agent
+    console.log('🚀 ELITE AGENT VERIFICATION:');
     console.log(`✅ Agent Type: ${agent.constructor.name}`);
-    console.log(`✅ Learning Rate: ${agent.learningRate} (Expected: 0.0003)`);
-    console.log(`✅ Epsilon: ${agent.epsilon} (Should be 0.02-0.95)`);
-    console.log(`✅ Gamma: ${agent.gamma} (Expected: 0.98)`);
-    console.log(`✅ Batch Size: ${agent.batchSize} (Expected: 128)`);
-    console.log(`✅ Memory Size: ${agent.memorySize} (Expected: 25000)`);
-    console.log(`✅ Episodes Trained: ${agent.episode}`);
-    console.log(`✅ Best Score: ${agent.bestScore}`);
-    console.log(`✅ Curriculum Stage: ${agent.curriculumStage}/3`);
-    console.log(`✅ Meta Patterns Learned: ${agent.metaLearning?.patternMemory?.size || 0}`);
-    console.log(`✅ Prioritized Replay: ${agent.prioritizedReplay ? 'ACTIVE' : 'DISABLED'}`);
+    console.log(`✅ State Size: ${agent.stateSize} (Expected: 139)`);
+    console.log(`✅ Action Size: ${agent.actionSize} (Expected: 243)`);
+    console.log(`✅ Elite Features: ${agent.isElite ? 'CONFIRMED' : 'MISSING'}`);
+    console.log(`✅ Double DQN: ${agent.qNetwork && agent.targetNetwork ? 'ACTIVE' : 'MISSING'}`);
+    console.log(`✅ Dueling Architecture: ${agent.qNetwork ? 'ACTIVE' : 'MISSING'}`);
+    console.log(`✅ Prioritized Replay: ${agent.alpha !== undefined ? 'ACTIVE' : 'MISSING'}`);
+    console.log(`✅ Multi-step Learning: ${agent.nStep > 1 ? 'ACTIVE' : 'MISSING'}`);
+    console.log(`✅ Advanced Exploration: ${agent.curiosityDriven ? 'ACTIVE' : 'MISSING'}`);
     
-    // 2. Verify EXPERT Environment Configuration  
-    console.log('🌍 EXPERT ENVIRONMENT VERIFICATION:');
+    // 2. Verify Elite Environment
+    console.log('🌍 ELITE ENVIRONMENT VERIFICATION:');
     console.log(`✅ Environment Type: ${environment.constructor.name}`);
-    console.log(`✅ State Size: ${environment.getStateSize()} (Expected: 112)`);
-    console.log(`✅ Max Action Space: ${environment.getMaxActionSpace()} (Expected: 147)`);
-    console.log(`✅ Current Difficulty: ${environment.difficulty}`);
-    console.log(`✅ Hierarchical Rewards: ${environment.rewardWeights ? 'ACTIVE' : 'MISSING'}`);
-    console.log(`✅ Meta-learning: ${environment.transferLearning ? 'ACTIVE' : 'MISSING'}`);
-    console.log(`✅ Adaptive Difficulty: ${environment.adaptiveDifficulty !== undefined ? 'ACTIVE' : 'MISSING'}`);
+    console.log(`✅ State Size: ${environment.getStateSize()} (Expected: 139)`);
+    console.log(`✅ Reward System: ${environment.rewardWeights ? 'ELITE' : 'BASIC'}`);
+    console.log(`✅ Spatial Analysis: ${environment.performSpatialAnalysis ? 'ACTIVE' : 'MISSING'}`);
+    console.log(`✅ Curriculum Learning: ${environment.curriculumLevel !== undefined ? 'ACTIVE' : 'MISSING'}`);
+    console.log(`✅ Adaptive Rewards: ${environment.adaptiveRewards ? 'ACTIVE' : 'MISSING'}`);
     
-    // 3. Verify EXPERT Neural Network Architecture
-    console.log('🧠 EXPERT NEURAL NETWORK VERIFICATION:');
-    if (agent.qNetwork) {
-      console.log(`✅ Q-Network: CNN-Transformer Hybrid`);
-      console.log(`✅ Target Network: ${agent.targetNetwork ? 'ACTIVE' : 'MISSING'}`);
-      console.log(`✅ Training Steps: ${agent.trainingStep}`);
-      console.log(`✅ Memory Usage: ${agent.memory.length}/${agent.memorySize}`);
-      console.log(`✅ Attention Mechanism: ${typeof agent.buildAttentionLayer === 'function' ? 'ACTIVE' : 'MISSING'}`);
-      console.log(`✅ Curriculum Loss: ${typeof agent.createHuberLoss === 'function' ? 'ACTIVE' : 'MISSING'}`);
-    } else {
-      console.log(`❌ Q-Network: MISSING`);
-    }
+    // 3. Performance Metrics
+    console.log('📊 PERFORMANCE METRICS:');
+    const stats = agent.getStats();
+    console.log(`✅ Episodes Trained: ${stats.episode}`);
+    console.log(`✅ Best Score: ${stats.bestScore}`);
+    console.log(`✅ Average Score: ${stats.avgScore?.toFixed(1) || '0'}`);
+    console.log(`✅ Line Clearing Success: ${(stats.lineClearingSuccess * 100).toFixed(1)}%`);
+    console.log(`✅ Max Sequential Clears: ${stats.maxSequentialClears || 0}`);
+    console.log(`✅ Current Epsilon: ${(stats.epsilon * 100).toFixed(1)}%`);
     
-    // 4. Verify EXPERT Strategic Features
-    console.log('🎯 EXPERT STRATEGIC FEATURES VERIFICATION:');
-    const expertFeatures = [
-      'getValidActionsWithHeuristics',
-      'calculateActionHeuristic', 
-      'calculatePatternCompletionBonus',
-      'calculateChainReactionPotential',
-      'calculateLongTermStrategy',
-      'applyMetaLearningBonus',
-      'adaptRewardWeights'
-    ];
+    // 4. Overall System Status
+    const isEliteAgent = agent.constructor.name === 'EliteDQNAgent' && agent.isElite;
+    const isEliteEnvironment = environment.constructor.name === 'EliteEnvironment';
+    const hasCorrectStateSize = agent.stateSize === environment.getStateSize();
+    const hasEliteFeatures = agent.alpha !== undefined && environment.rewardWeights;
     
-    let expertFeaturesActive = 0;
-    expertFeatures.forEach(feature => {
-      const exists = typeof environment[feature] === 'function';
-      console.log(`${exists ? '✅' : '❌'} ${feature}: ${exists ? 'ACTIVE' : 'MISSING'}`);
-      if (exists) expertFeaturesActive++;
-    });
+    const overallEliteStatus = isEliteAgent && isEliteEnvironment && hasCorrectStateSize && hasEliteFeatures;
     
-    const expertSystemHealth = (expertFeaturesActive / expertFeatures.length) * 100;
-    console.log(`🎯 Expert System Health: ${expertSystemHealth.toFixed(1)}% (${expertFeaturesActive}/${expertFeatures.length} features)`);
-    
-    // 5. Verify EXPERT Learning Features
-    console.log('🎓 EXPERT LEARNING FEATURES VERIFICATION:');
-    const expertLearningFeatures = [
-      'storeMetaPattern',
-      'getMetaLearningBias',
-      'updateCurriculum',
-      'samplePrioritizedBatch',
-      'updatePriorities',
-      'adjustParametersForStage'
-    ];
-    
-    let learningFeaturesActive = 0;
-    expertLearningFeatures.forEach(feature => {
-      const exists = typeof agent[feature] === 'function';
-      console.log(`${exists ? '✅' : '❌'} ${feature}: ${exists ? 'ACTIVE' : 'MISSING'}`);
-      if (exists) learningFeaturesActive++;
-    });
-    
-    const learningSystemHealth = (learningFeaturesActive / expertLearningFeatures.length) * 100;
-    console.log(`🎓 Learning System Health: ${learningSystemHealth.toFixed(1)}% (${learningFeaturesActive}/${expertLearningFeatures.length} features)`);
-    
-    // 6. Overall EXPERT System Status
-    console.log('📊 OVERALL EXPERT SYSTEM STATUS:');
-    const isExpertAgent = agent.learningRate === 0.0003 && agent.gamma === 0.98 && agent.batchSize === 128;
-    const isExpertEnvironment = environment.getStateSize() === 112 && environment.rewardWeights;
-    const hasExpertFeatures = expertSystemHealth >= 80 && learningSystemHealth >= 80;
-    const hasHybridNetwork = typeof agent.buildHybridNetwork === 'function';
-    
-    console.log(`${isExpertAgent ? '✅' : '❌'} Expert Agent Configuration: ${isExpertAgent ? 'CONFIRMED' : 'OUTDATED'}`);
-    console.log(`${isExpertEnvironment ? '✅' : '❌'} Expert Environment Configuration: ${isExpertEnvironment ? 'CONFIRMED' : 'OUTDATED'}`);
-    console.log(`${hasExpertFeatures ? '✅' : '❌'} Expert Strategic Features: ${hasExpertFeatures ? 'FULLY ACTIVE' : 'INCOMPLETE'}`);
-    console.log(`${hasHybridNetwork ? '✅' : '❌'} CNN-Transformer Architecture: ${hasHybridNetwork ? 'ACTIVE' : 'MISSING'}`);
-    
-    const overallExpertStatus = isExpertAgent && isExpertEnvironment && hasExpertFeatures && hasHybridNetwork;
-    console.log(`🎯 FINAL EXPERT VERDICT: ${overallExpertStatus ? '✅ EXPERT AI SYSTEM CONFIRMED' : '❌ SYSTEM NEEDS EXPERT UPGRADE'}`);
-    
-    console.log('🔍 ========== EXPERT VERIFICATION COMPLETE ==========');
+    console.log(`🏆 FINAL ELITE VERDICT: ${overallEliteStatus ? '✅ ELITE AI SYSTEM CONFIRMED' : '❌ SYSTEM NEEDS UPGRADE'}`);
+    console.log('🔍 ========== ELITE VERIFICATION COMPLETE ==========');
     
     // Show user-friendly alert
-    if (overallExpertStatus) {
-      alert(`✅ EXPERT VERIFICATION PASSED!\n\nYour AI is using the EXPERT system with:\n• CNN-Transformer hybrid architecture\n• Hierarchical weighted reward system\n• Prioritized experience replay\n• Curriculum learning (Stage ${agent.curriculumStage}/3)\n• Meta-learning (${agent.metaLearning?.patternMemory?.size || 0} patterns)\n• Hybrid action selection\n\nCheck console for detailed report.`);
+    if (overallEliteStatus) {
+      alert(`🏆 ELITE VERIFICATION PASSED!\n\nYour AI is using the ELITE system with:\n• Double DQN with Dueling Architecture\n• Prioritized Experience Replay\n• Multi-step Learning\n• Advanced Exploration Strategies\n• Sophisticated Reward Shaping\n• Curriculum Learning\n\nBest Score: ${stats.bestScore}\nAverage Score: ${stats.avgScore?.toFixed(1) || '0'}\n\nCheck console for detailed report.`);
     } else {
-      alert('⚠️ EXPERT VERIFICATION ISSUES DETECTED!\n\nSome expert components may be outdated or missing.\nCheck the browser console for detailed analysis.');
+      alert('⚠️ ELITE VERIFICATION ISSUES DETECTED!\n\nSome elite components may be missing or misconfigured.\nCheck the browser console for detailed analysis.');
     }
   };
 
@@ -569,109 +658,119 @@ function AITrainingPanel({
   }, []);
 
   useEffect(() => {
-    // Auto-restart AI play if enabled and game resets
+    // Auto-restart Elite AI play if enabled and game resets
     if (autoPlay && !gameOver && !isPlaying && agent && continuousPlay) {
-      console.log('🎮 Auto-restarting AI play after game reset...');
+      console.log('🎮 Auto-restarting Elite AI play after game reset...');
       setTimeout(() => startAIPlay(), 1000);
     }
   }, [gameOver, autoPlay, agent]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    // Update play speed dynamically and restart AI play if needed
+    // Update play speed dynamically
     if (isPlaying && playIntervalRef.current) {
       clearInterval(playIntervalRef.current);
       playIntervalRef.current = setInterval(async () => {
-        await makeAIMove();
+        await makeEliteAIMove();
       }, playSpeed);
     }
-  }, [playSpeed, makeAIMove]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [playSpeed, makeEliteAIMove]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="ai-training-panel" style={{ minHeight: '800px' }}>
-      <h3>🤖 AI Training Center</h3>
+      <h3>🏆 Elite AI Training Center</h3>
       
-      {/* Quick Start Guide */}
+      {/* Elite System Status Banner */}
       <div style={{ 
-        background: 'linear-gradient(135deg, rgba(255, 215, 0, 0.1), rgba(255, 165, 0, 0.1))', 
+        background: 'linear-gradient(135deg, rgba(255, 215, 0, 0.15), rgba(255, 165, 0, 0.15))', 
         padding: '20px', 
         borderRadius: '10px', 
         marginBottom: '20px',
-        border: '2px solid #FFD700'
+        border: '3px solid #FFD700',
+        boxShadow: '0 4px 15px rgba(255, 215, 0, 0.3)'
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '15px' }}>
-          <span style={{ fontSize: '24px' }}>🚀</span>
-          <strong style={{ fontSize: '18px', color: '#FFD700' }}>Quick Start: Watch AI Learn Visually!</strong>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '15px' }}>
+          <span style={{ fontSize: '32px' }}>🚀</span>
+          <div>
+            <strong style={{ fontSize: '20px', color: '#FFD700' }}>ELITE AI SYSTEM ACTIVE</strong>
+            <div style={{ color: '#D2B48C', fontSize: '14px', marginTop: '5px' }}>
+              Double DQN + Dueling Architecture + Prioritized Replay + Advanced Exploration
         </div>
+          </div>
+        </div>
+        
         <div style={{ 
           display: 'grid', 
-          gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', 
+          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', 
           gap: '15px',
           marginBottom: '15px'
         }}>
           <div style={{ 
-            background: 'rgba(139, 69, 19, 0.3)',
+            background: 'rgba(139, 69, 19, 0.4)',
             padding: '12px',
             borderRadius: '8px',
             border: '1px solid #8B4513'
           }}>
             <div style={{ color: '#FFD700', fontWeight: 'bold', marginBottom: '5px' }}>
-              1️⃣ Enable Visual Training
+              🧠 Neural Architecture
             </div>
-            <div style={{ color: '#D2B48C', fontSize: '13px' }}>
-              ✅ Check "Visual Training Mode" below to watch AI play on the game board
+            <div style={{ color: '#D2B48C', fontSize: '12px' }}>
+              Dueling Double DQN with Huber Loss
             </div>
           </div>
+          
           <div style={{ 
-            background: 'rgba(139, 69, 19, 0.3)',
+            background: 'rgba(139, 69, 19, 0.4)',
             padding: '12px',
             borderRadius: '8px',
             border: '1px solid #8B4513'
           }}>
             <div style={{ color: '#FFD700', fontWeight: 'bold', marginBottom: '5px' }}>
-              2️⃣ Start Training
+              🎯 Reward Shaping
             </div>
-            <div style={{ color: '#D2B48C', fontSize: '13px' }}>
-              🧠 Click "Start Training" to see live episode-by-episode gameplay
+            <div style={{ color: '#D2B48C', fontSize: '12px' }}>
+              Sophisticated multi-factor scoring
             </div>
           </div>
+          
           <div style={{ 
-            background: 'rgba(139, 69, 19, 0.3)',
+            background: 'rgba(139, 69, 19, 0.4)',
             padding: '12px',
             borderRadius: '8px',
             border: '1px solid #8B4513'
           }}>
             <div style={{ color: '#FFD700', fontWeight: 'bold', marginBottom: '5px' }}>
-              3️⃣ Watch Charts Update
+              🔄 Experience Replay
             </div>
-            <div style={{ color: '#D2B48C', fontSize: '13px' }}>
-              📊 See real-time learning progress in D3.js charts below
+            <div style={{ color: '#D2B48C', fontSize: '12px' }}>
+              Prioritized sampling with TD-error
+          </div>
+        </div>
+        
+        <div style={{ 
+            background: 'rgba(139, 69, 19, 0.4)',
+            padding: '12px',
+          borderRadius: '8px', 
+            border: '1px solid #8B4513'
+        }}>
+            <div style={{ color: '#FFD700', fontWeight: 'bold', marginBottom: '5px' }}>
+              🎓 Learning Strategy
+          </div>
+            <div style={{ color: '#D2B48C', fontSize: '12px' }}>
+              Multi-step + Curriculum + Adaptive
             </div>
           </div>
         </div>
         
-        {/* Game Rules Reminder */}
-        <div style={{ 
-          background: 'rgba(255, 215, 0, 0.1)', 
-          padding: '15px', 
-          borderRadius: '8px', 
-          marginBottom: '10px',
+          <div style={{ 
+          fontSize: '13px', 
+          color: '#FFD700', 
+          textAlign: 'center',
+          padding: '10px',
+          background: 'rgba(255, 215, 0, 0.1)',
+          borderRadius: '5px',
           border: '1px solid #FFD700'
         }}>
-          <div style={{ color: '#FFD700', fontWeight: 'bold', marginBottom: '8px', fontSize: '14px' }}>
-            🎮 Game Rules (AI follows exactly):
-          </div>
-          <div style={{ 
-            display: 'grid', 
-            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', 
-            gap: '10px',
-            fontSize: '12px',
-            color: '#D2B48C'
-          }}>
-            <div>• Place blocks to fill rows, columns, or 3x3 squares</div>
-            <div>• Game ends when no blocks can be placed</div>
-            <div>• Score increases from block placement + line clears</div>
-            <div>• New blocks appear when tray is empty</div>
-          </div>
+          <strong>🏆 OBJECTIVE:</strong> Achieve maximum game score through state-of-the-art reinforcement learning
         </div>
       </div>
       
@@ -684,7 +783,7 @@ function AITrainingPanel({
         border: '2px solid #FFD700'
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-          <strong style={{ fontSize: '16px' }}>🎯 AI Status Dashboard</strong>
+          <strong style={{ fontSize: '16px' }}>🎯 Elite AI Status Dashboard</strong>
           <div style={{ display: 'flex', gap: '15px', fontSize: '14px' }}>
             <span>Training: <strong style={{ color: isTraining ? '#28a745' : '#dc3545' }}>
               {isTraining ? 'ACTIVE' : 'STOPPED'}
@@ -695,25 +794,15 @@ function AITrainingPanel({
             <span>Visual: <strong style={{ color: visualTraining ? '#28a745' : '#6c757d' }}>
               {visualTraining ? 'ON' : 'OFF'}
             </strong></span>
+            <span>Level: <strong style={{ color: '#FFD700' }}>
+              {environment?.curriculumLevel || 0}
+            </strong></span>
           </div>
         </div>
         <div style={{ fontSize: '14px', opacity: 0.9, lineHeight: '1.4' }}>
-          <strong>How it works:</strong> Training teaches the AI by playing thousands of practice games. 
-          Visual Training Mode lets you watch each episode on the game board in real-time. 
-          AI Play uses the trained knowledge to play your current game.
-        </div>
-        <div style={{ 
-          fontSize: '12px', 
-          color: '#FFD700', 
-          marginTop: '8px',
-          padding: '8px',
-          background: 'rgba(255, 215, 0, 0.1)',
-          borderRadius: '5px',
-          border: '1px solid #FFD700'
-        }}>
-          <strong>🎮 Game Rules:</strong> AI follows exact Wood Block Puzzle rules - place blocks to fill rows/columns/squares, 
-          game ends when no blocks can be placed, new blocks appear when tray is empty. 
-          <em>Now using 3x3 max blocks for faster training!</em>
+          <strong>Elite Performance Optimization:</strong> This system uses cutting-edge reinforcement learning techniques 
+          to maximize game scores. Features include sophisticated reward shaping, advanced exploration strategies, 
+          and state-of-the-art neural network architectures for optimal decision making.
         </div>
       </div>
       
@@ -876,6 +965,30 @@ function AITrainingPanel({
             </button>
             
             <button
+              onClick={downloadModel}
+              disabled={!agent}
+              className="btn download-btn"
+              style={{
+                background: 'linear-gradient(145deg, #17a2b8, #138496)',
+                border: '2px solid #117a8b'
+              }}
+            >
+              🔽 Download Model
+            </button>
+            
+            <button
+              onClick={uploadModel}
+              disabled={!agent}
+              className="btn upload-btn"
+              style={{
+                background: 'linear-gradient(145deg, #6f42c1, #5a32a3)',
+                border: '2px solid #4e2a87'
+              }}
+            >
+              🔼 Upload Model
+            </button>
+            
+            <button
               onClick={runTests}
               className="btn test-btn"
             >
@@ -883,7 +996,7 @@ function AITrainingPanel({
             </button>
             
             <button
-              onClick={verifyAISystem}
+              onClick={verifyEliteSystem}
               className="btn"
               style={{
                 background: 'linear-gradient(145deg, #4CAF50, #45a049)',
@@ -896,7 +1009,11 @@ function AITrainingPanel({
           </div>
           
           <div style={{ fontSize: '12px', color: '#D2B48C', marginTop: '8px' }}>
-            Models are saved per difficulty: wood-block-dqn-{difficulty}
+            <div><strong>Browser Storage:</strong> Save/Load (persistent in browser)</div>
+            <div><strong>File Downloads:</strong> Download/Upload (portable files)</div>
+            <div style={{ marginTop: '4px', fontSize: '11px', fontStyle: 'italic' }}>
+              💡 Download creates 3 files: model.json, model.bin, and state.json
+            </div>
           </div>
         </div>
       </div>
@@ -911,18 +1028,18 @@ function AITrainingPanel({
           marginBottom: '20px'
         }}>
           <h4 style={{ color: '#FFD700', marginBottom: '15px' }}>
-            🎮 Live Training Episode #{currentEpisode}
+            🎮 Live Training Episode #{currentEpisode} - Level {trainingStats.curriculumLevel || 0} ({trainingStats.currentComplexity || 'simple'} blocks)
           </h4>
           
           <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-start' }}>
             {/* Training Game Board */}
             <div style={{ flex: 1 }}>
               <div style={{ marginBottom: '10px', color: '#D2B48C', fontSize: '14px' }}>
-                Training Game Board
+                Training Game Board ({trainingStats.currentGridSize || 9}x{trainingStats.currentGridSize || 9})
               </div>
               <div style={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(9, 1fr)',
+                gridTemplateColumns: `repeat(${trainingStats.currentGridSize || 9}, 1fr)`,
                 gap: '2px',
                 background: '#654321',
                 padding: '10px',
@@ -1005,6 +1122,14 @@ function AITrainingPanel({
                   <span style={{ color: 'white', marginLeft: '8px' }}>{currentEpisode}</span>
                 </div>
                 <div style={{ marginBottom: '8px' }}>
+                  <span style={{ color: '#FFD700', fontWeight: 'bold' }}>Level:</span>
+                  <span style={{ color: 'white', marginLeft: '8px' }}>{trainingStats.curriculumLevel || 0}</span>
+                </div>
+                <div style={{ marginBottom: '8px' }}>
+                  <span style={{ color: '#FFD700', fontWeight: 'bold' }}>Complexity:</span>
+                  <span style={{ color: 'white', marginLeft: '8px' }}>{trainingStats.currentComplexity || 'simple'}</span>
+                </div>
+                <div style={{ marginBottom: '8px' }}>
                   <span style={{ color: '#FFD700', fontWeight: 'bold' }}>Score:</span>
                   <span style={{ color: 'white', marginLeft: '8px' }}>{episodeScore}</span>
                 </div>
@@ -1016,6 +1141,10 @@ function AITrainingPanel({
                   <span style={{ color: '#FFD700', fontWeight: 'bold' }}>Blocks:</span>
                   <span style={{ color: 'white', marginLeft: '8px' }}>{trainingBlocks.length}</span>
                 </div>
+                <div style={{ marginBottom: '8px' }}>
+                  <span style={{ color: '#FFD700', fontWeight: 'bold' }}>Line Clears:</span>
+                  <span style={{ color: trainingStats.lineClearsThisEpisode > 0 ? '#28a745' : 'white', marginLeft: '8px', fontWeight: 'bold' }}>{trainingStats.lineClearsThisEpisode || 0}</span>
+                </div>
                 
                 <div style={{ 
                   marginTop: '15px',
@@ -1026,10 +1155,10 @@ function AITrainingPanel({
                   textAlign: 'center'
                 }}>
                   <div style={{ color: '#28a745', fontSize: '12px', fontWeight: 'bold' }}>
-                    🧠 AI Learning...
+                    🧠 PROGRESSIVE Learning...
                   </div>
                   <div style={{ color: '#D2B48C', fontSize: '10px', marginTop: '2px' }}>
-                    Episode in progress
+                    Curriculum Level {trainingStats.curriculumLevel || 0}
                   </div>
                 </div>
               </div>
@@ -1040,19 +1169,52 @@ function AITrainingPanel({
       
       {trainingStats.episode && (
         <div className="training-stats">
-          <h4>📊 EXPERT Training Statistics</h4>
+          <h4>📊 FIXED GRID Training Statistics</h4>
           <div className="stats-grid">
             <div className="stat-item">
               <span className="stat-label">Episode:</span>
               <span className="stat-value">{trainingStats.episode}</span>
             </div>
             <div className="stat-item">
-              <span className="stat-label">Avg Reward (100):</span>
-              <span className="stat-value">{trainingStats.avgReward?.toFixed(2) || '0'}</span>
+              <span className="stat-label">Block Complexity Level:</span>
+              <span className="stat-value" style={{ 
+                color: trainingStats.curriculumLevel >= 3 ? '#28a745' : 
+                       trainingStats.curriculumLevel >= 2 ? '#ffc107' : 
+                       trainingStats.curriculumLevel >= 1 ? '#fd7e14' : '#dc3545',
+                fontWeight: 'bold'
+              }}>
+                {trainingStats.curriculumLevel || 0} ({
+                  trainingStats.curriculumLevel === 0 ? 'Simple' : 
+                  trainingStats.curriculumLevel === 1 ? 'Medium' : 
+                  trainingStats.curriculumLevel === 2 ? 'Complex' : 
+                  'Full'
+                } - 9x9 grid)
+              </span>
             </div>
             <div className="stat-item">
-              <span className="stat-label">Avg Reward (10):</span>
-              <span className="stat-value">{trainingStats.avgReward10?.toFixed(2) || '0'}</span>
+              <span className="stat-label">Lines Cleared (Episode):</span>
+              <span className="stat-value" style={{ 
+                color: trainingStats.lineClearsThisEpisode > 0 ? '#28a745' : '#dc3545',
+                fontWeight: 'bold'
+              }}>
+                {trainingStats.lineClearsThisEpisode || 0}
+              </span>
+            </div>
+            <div className="stat-item">
+              <span className="stat-label">Line Clear Success Rate:</span>
+              <span className="stat-value" style={{ 
+                color: trainingStats.lineClearingSuccess > 0.3 ? '#28a745' : 
+                       trainingStats.lineClearingSuccess > 0.1 ? '#ffc107' : '#dc3545',
+                fontWeight: 'bold'
+              }}>
+                {(trainingStats.lineClearingSuccess * 100)?.toFixed(1) || '0'}%
+              </span>
+            </div>
+            <div className="stat-item">
+              <span className="stat-label">Total Line Clears:</span>
+              <span className="stat-value" style={{ color: '#00CED1', fontWeight: 'bold' }}>
+                {trainingStats.lineClearingCount || '0'}
+              </span>
             </div>
             <div className="stat-item">
               <span className="stat-label">Best Score:</span>
@@ -1061,21 +1223,8 @@ function AITrainingPanel({
               </span>
             </div>
             <div className="stat-item">
-              <span className="stat-label">Curriculum Stage:</span>
-              <span className="stat-value" style={{ 
-                color: trainingStats.curriculumStage >= 3 ? '#28a745' : 
-                       trainingStats.curriculumStage >= 2 ? '#ffc107' : 
-                       trainingStats.curriculumStage >= 1 ? '#fd7e14' : '#dc3545',
-                fontWeight: 'bold'
-              }}>
-                {trainingStats.curriculumStage || 0} / 3
-              </span>
-            </div>
-            <div className="stat-item">
-              <span className="stat-label">Meta Patterns:</span>
-              <span className="stat-value" style={{ color: '#00CED1', fontWeight: 'bold' }}>
-                {trainingStats.metaPatternsLearned || '0'}
-              </span>
+              <span className="stat-label">Avg Reward:</span>
+              <span className="stat-value">{trainingStats.avgReward?.toFixed(2) || '0'}</span>
             </div>
             <div className="stat-item">
               <span className="stat-label">Exploration Rate:</span>
@@ -1090,24 +1239,25 @@ function AITrainingPanel({
               <span className="stat-value">{trainingStats.trainingSteps}</span>
             </div>
             <div className="stat-item">
-              <span className="stat-label">Priority Beta:</span>
-              <span className="stat-value">{trainingStats.priorityBeta?.toFixed(3) || '0.400'}</span>
-            </div>
-            <div className="stat-item">
-              <span className="stat-label">Max Priority:</span>
-              <span className="stat-value">{trainingStats.maxPriority?.toFixed(2) || '1.00'}</span>
-            </div>
-            <div className="stat-item">
               <span className="stat-label">Training Loss:</span>
               <span className="stat-value">{trainingStats.avgLoss?.toFixed(4) || '0'}</span>
             </div>
+            <div className="stat-item">
+              <span className="stat-label">Guided Exploration:</span>
+              <span className="stat-value" style={{ 
+                color: trainingStats.guidedExploration ? '#28a745' : '#dc3545',
+                fontWeight: 'bold'
+              }}>
+                {trainingStats.guidedExploration ? 'ON' : 'OFF'}
+              </span>
+            </div>
           </div>
           
-          {/* EXPERT ENHANCEMENT: Curriculum Progress Bar */}
-          {typeof trainingStats.curriculumStage === 'number' && (
+          {/* FIXED CURRICULUM: Progress Bar */}
+          {typeof trainingStats.curriculumLevel === 'number' && (
             <div style={{ marginTop: '15px', marginBottom: '15px' }}>
               <div style={{ marginBottom: '8px', color: '#FFD700', fontWeight: 'bold' }}>
-                🎓 Curriculum Progress
+                🎓 Block Complexity Progression
               </div>
               <div style={{ 
                 background: 'rgba(139, 69, 19, 0.3)', 
@@ -1117,11 +1267,11 @@ function AITrainingPanel({
                 overflow: 'hidden'
               }}>
                 <div style={{
-                  background: trainingStats.curriculumStage >= 3 ? 
+                  background: trainingStats.curriculumLevel >= 3 ? 
                     'linear-gradient(90deg, #28a745, #20c997)' :
                     'linear-gradient(90deg, #ffc107, #fd7e14)',
                   height: '100%',
-                  width: `${((trainingStats.curriculumStage + 1) / 4) * 100}%`,
+                  width: `${((trainingStats.curriculumLevel + 1) / 4) * 100}%`,
                   transition: 'width 0.5s ease',
                   display: 'flex',
                   alignItems: 'center',
@@ -1130,7 +1280,7 @@ function AITrainingPanel({
                   fontSize: '12px',
                   fontWeight: 'bold'
                 }}>
-                  {['Basic', 'Intermediate', 'Advanced', 'Expert'][trainingStats.curriculumStage] || 'Basic'}
+                  {['Simple', 'Medium', 'Complex', 'Full'][trainingStats.curriculumLevel] || 'Simple'}
                 </div>
               </div>
               <div style={{ 
@@ -1139,9 +1289,9 @@ function AITrainingPanel({
                 marginTop: '5px',
                 textAlign: 'center'
               }}>
-                {trainingStats.curriculumStage === 3 ? 
-                  '🏆 Expert level achieved!' :
-                  `Next: ${['Intermediate', 'Advanced', 'Expert'][trainingStats.curriculumStage]} (${[100, 500, 1000, 2000][trainingStats.curriculumStage]} avg reward)`
+                {trainingStats.curriculumLevel === 3 ? 
+                  '🏆 All block types mastered!' :
+                  `Next: ${['Medium blocks', 'Complex blocks', 'Full game'][trainingStats.curriculumLevel]} (need ${5 + trainingStats.curriculumLevel} line clears)`
                 }
               </div>
             </div>
@@ -1162,10 +1312,21 @@ function AITrainingPanel({
       )}
 
       {/* Always show AI visualization */}
+      <div style={{
+        maxHeight: '600px',
+        overflowY: 'auto',
+        overflowX: 'hidden',
+        border: '2px solid #8B4513',
+        borderRadius: '10px',
+        padding: '15px',
+        background: 'rgba(139, 69, 19, 0.1)',
+        marginTop: '20px'
+      }}>
       <AIVisualization 
         trainingStats={trainingStats} 
         isTraining={isTraining}
       />
+      </div>
     </div>
   );
 }
