@@ -24,6 +24,7 @@ function AILearningView({ onNavigate }) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [visualTraining, setVisualTraining] = useState(true);
   const [trainingSpeed, setTrainingSpeed] = useState(50);
+  const [maxEpisodes, setMaxEpisodes] = useState(500);
   
   // Game State
   const [grid, setGrid] = useState(Array(9).fill(null).map(() => Array(9).fill(false)));
@@ -32,6 +33,8 @@ function AILearningView({ onNavigate }) {
   const [bestScore, setBestScore] = useState(0);
   const [difficulty, setDifficulty] = useState('normal');
   const [gameOver, setGameOver] = useState(false);
+  const [linesCleared, setLinesCleared] = useState(0);
+  const [totalLinesCleared, setTotalLinesCleared] = useState(0);
   
   // Training Progress
   const [currentEpisode, setCurrentEpisode] = useState(0);
@@ -139,6 +142,7 @@ function AILearningView({ onNavigate }) {
     setGrid(env.grid.map(row => [...row]));
     setAvailableBlocks(env.availableBlocks.map(block => block.map(row => [...row])));
     setScore(env.score);
+    setLinesCleared(0);
     setGameOver(false);
     
     console.log(`✅ ${config.name} initialized successfully!`);
@@ -175,7 +179,7 @@ function AILearningView({ onNavigate }) {
       await new Promise(resolve => setTimeout(resolve, 50));
       
       // Check if we've reached the episode limit
-      if (episodeRef.current >= 500) {
+      if (episodeRef.current >= maxEpisodes) {
         break;
       }
     }
@@ -217,6 +221,9 @@ function AILearningView({ onNavigate }) {
     setCurrentEpisode(0);
     setEpisodeScore(0);
     setEpisodeSteps(0);
+    setScore(0);
+    setLinesCleared(0);
+    setTotalLinesCleared(0);
     setTrainingStats({});
     episodeRef.current = 0;
     stepRef.current = 0;
@@ -297,6 +304,7 @@ function AILearningView({ onNavigate }) {
       setGrid(environment.grid.map(row => [...row]));
       setAvailableBlocks(environment.availableBlocks.map(block => block.map(row => [...row])));
       setScore(realGameScore); // Use real game score
+      setLinesCleared(environment.lineClearsThisEpisode || 0); // Track actual lines cleared
       setBestScore(Math.max(bestScore, realGameScore)); // Use real game score
       
       // Check if game is over
@@ -426,11 +434,10 @@ function AILearningView({ onNavigate }) {
         totalReward += stepResult.reward; // Internal AI reward for learning
         const actualGameScore = environment.score; // Real game score for fair comparison
         
-        // Visual feedback - show REAL game score, not AI rewards
+        // Update state for both visual and non-visual training
         if (visualTraining) {
           setGrid(environment.grid.map(row => [...row]));
           setAvailableBlocks(environment.availableBlocks.map(block => block.map(row => [...row])));
-          setEpisodeScore(actualGameScore); // Show real game score
           setEpisodeSteps(stepCount + 1);
           stepRef.current = stepCount + 1;
           
@@ -439,11 +446,16 @@ function AILearningView({ onNavigate }) {
             await new Promise(resolve => setTimeout(resolve, Math.max(10, 100 - trainingSpeed)));
           }
         } else {
-          // Even without visual training, yield periodically to prevent UI freezing
-          if (stepCount % 10 === 0) {
-            await new Promise(resolve => setTimeout(resolve, 5));
+          // Without visual training, much faster execution with minimal yielding
+          if (stepCount % 20 === 0) {
+            await new Promise(resolve => setTimeout(resolve, 1)); // Very minimal delay
           }
         }
+        
+        // Always update score and lines cleared for both modes
+        setScore(actualGameScore); // Update main score display
+        setLinesCleared(environment.lineClearsThisEpisode || 0); // Update lines cleared
+        setEpisodeScore(actualGameScore); // Show real game score
         
         // Algorithm-specific experience storage and training
         switch (selectedAlgorithm) {
@@ -536,9 +548,12 @@ function AILearningView({ onNavigate }) {
         setTrainingStats(stats);
         setBestScore(Math.max(bestScore, finalGameScore)); // Use real game score for best score
         
+        // Update total lines cleared
+        setTotalLinesCleared(prev => prev + (environment.lineClearsThisEpisode || 0));
+        
         // Log progress every 10 episodes - show REAL performance
         if (episodeRef.current % 10 === 0) {
-          console.log(`📊 Episode ${episodeRef.current}: REAL Score=${finalGameScore}, AI Reward=${totalReward.toFixed(1)}, Best=${Math.max(bestScore, finalGameScore)}, Algorithm=${selectedAlgorithm}`);
+          console.log(`📊 Episode ${episodeRef.current}/${maxEpisodes}: REAL Score=${finalGameScore}, AI Reward=${totalReward.toFixed(1)}, Best=${Math.max(bestScore, finalGameScore)}, Lines=${environment.lineClearsThisEpisode || 0}, Algorithm=${selectedAlgorithm}`);
         }
       }
       
@@ -1230,11 +1245,6 @@ ${testResults.averageScore >= 500 ? '🏆 Excellent' :
               <div style={{ color: '#D2B48C', fontSize: '14px', marginBottom: '8px' }}>
                 Episodes: {trainingStats.episode || 0}
               </div>
-              <div style={{ color: '#D2B48C', fontSize: '14px', marginBottom: '8px' }}>
-                Best Score: <span style={{ color: '#28a745', fontWeight: 'bold' }}>
-                  {trainingStats.bestScore || 0}
-                </span>
-              </div>
               <div style={{ color: '#D2B48C', fontSize: '14px' }}>
                 Avg Score: <span style={{ color: '#17a2b8', fontWeight: 'bold' }}>
                   {trainingStats.avgScore?.toFixed(1) || '0.0'}
@@ -1321,9 +1331,6 @@ ${testResults.averageScore >= 500 ? '🏆 Excellent' :
           marginBottom: '20px'
         }}>
           <div className="control-group">
-            <label style={{ color: '#FFD700', fontWeight: 'bold', marginBottom: '8px', display: 'block' }}>
-              Training Controls
-            </label>
             <div style={{ display: 'flex', gap: '10px' }}>
               {!isTraining ? (
                 <button
@@ -1398,9 +1405,6 @@ ${testResults.averageScore >= 500 ? '🏆 Excellent' :
           </div>
 
           <div className="control-group">
-            <label style={{ color: '#FFD700', fontWeight: 'bold', marginBottom: '8px', display: 'block' }}>
-              AI Gameplay
-            </label>
             <div style={{ display: 'flex', gap: '10px' }}>
               {!isPlaying ? (
                 <button
@@ -1440,9 +1444,6 @@ ${testResults.averageScore >= 500 ? '🏆 Excellent' :
           </div>
 
           <div className="control-group">
-            <label style={{ color: '#FFD700', fontWeight: 'bold', marginBottom: '8px', display: 'block' }}>
-              Model Management
-            </label>
             <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
               <button
                 onClick={saveModel}
@@ -1514,9 +1515,6 @@ ${testResults.averageScore >= 500 ? '🏆 Excellent' :
           </div>
 
           <div className="control-group">
-            <label style={{ color: '#FFD700', fontWeight: 'bold', marginBottom: '8px', display: 'block' }}>
-              Performance Testing
-            </label>
             <div style={{ display: 'flex', gap: '10px' }}>
               <button
                 onClick={testAlgorithm}
@@ -1535,8 +1533,53 @@ ${testResults.averageScore >= 500 ? '🏆 Excellent' :
                 🎯 Test Performance
               </button>
             </div>
-            <div style={{ fontSize: '12px', color: '#D2B48C', marginTop: '5px' }}>
-              Run 10 games to measure real performance
+          </div>
+
+          <div className="control-group">
+            <label style={{ color: '#FFD700', fontWeight: 'bold', marginBottom: '8px', display: 'block' }}>
+              Max Episodes: {maxEpisodes}
+            </label>
+            <input
+              type="number"
+              min="10"
+              max="10000"
+              value={maxEpisodes}
+              onChange={(e) => setMaxEpisodes(parseInt(e.target.value))}
+              disabled={isTraining}
+              style={{
+                width: '100%',
+                padding: '8px',
+                borderRadius: '6px',
+                border: '2px solid #8B4513',
+                background: 'rgba(255, 215, 0, 0.1)',
+                color: '#FFD700',
+                fontSize: '14px',
+                fontWeight: 'bold',
+                marginBottom: '8px'
+              }}
+            />
+            <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
+              {[100, 500, 1000, 2000, 5000].map(episodes => (
+                <button
+                  key={episodes}
+                  onClick={() => setMaxEpisodes(episodes)}
+                  disabled={isTraining}
+                  style={{
+                    padding: '4px 8px',
+                    borderRadius: '4px',
+                    border: 'none',
+                    background: maxEpisodes === episodes 
+                      ? 'linear-gradient(145deg, #FFD700, #FFA500)' 
+                      : 'rgba(139, 69, 19, 0.5)',
+                    color: maxEpisodes === episodes ? '#2C1810' : '#D2B48C',
+                    fontSize: '10px',
+                    fontWeight: 'bold',
+                    cursor: 'pointer'
+                  }}
+                >
+                  {episodes}
+                </button>
+              ))}
             </div>
           </div>
 
@@ -1557,64 +1600,28 @@ ${testResults.averageScore >= 500 ? '🏆 Excellent' :
               }}
             />
           </div>
+
+          <div className="control-group">
+            <label style={{ color: '#FFD700', fontWeight: 'bold', marginBottom: '8px', display: 'block' }}>
+              Training Options
+            </label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <label style={{ color: '#D2B48C', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                <input
+                  type="checkbox"
+                  checked={visualTraining}
+                  onChange={(e) => setVisualTraining(e.target.checked)}
+                  disabled={isTraining}
+                  style={{ accentColor: '#FFD700' }}
+                />
+                Show Game Board
+              </label>
+            </div>
+          </div>
         </div>
 
         {/* Training Progress */}
-        {(isTraining || currentEpisode > 0) && (
-          <div className="training-progress" style={{
-            background: 'rgba(139, 69, 19, 0.3)',
-            padding: '15px',
-            borderRadius: '8px',
-            border: '1px solid #8B4513',
-            marginBottom: '20px'
-          }}>
-            <div className="progress-header" style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              marginBottom: '10px'
-            }}>
-              <h4 style={{ color: '#FFD700', margin: 0 }}>Training Progress</h4>
-              <button
-                onClick={resetTraining}
-                disabled={isTraining || isPlaying}
-                style={{
-                  padding: '8px 12px',
-                  borderRadius: '6px',
-                  border: 'none',
-                  background: 'linear-gradient(145deg, #6c757d, #5a6268)',
-                  color: 'white',
-                  fontWeight: 'bold',
-                  fontSize: '12px'
-                }}
-              >
-                🔄 Reset
-              </button>
-            </div>
-            
-            <div className="progress-bar" style={{
-              width: '100%',
-              height: '20px',
-              background: 'rgba(139, 69, 19, 0.5)',
-              borderRadius: '10px',
-              overflow: 'hidden',
-              marginBottom: '10px'
-            }}>
-              <div 
-                className="progress-fill"
-                style={{ 
-                  width: `${(currentEpisode / 500) * 100}%`,
-                  height: '100%',
-                  background: 'linear-gradient(90deg, #FFD700, #FFA500)',
-                  transition: 'width 0.3s ease'
-                }}
-              />
-            </div>
-            <div className="progress-text" style={{ color: '#D2B48C', fontSize: '14px', textAlign: 'center' }}>
-              Episode {currentEpisode} / 500 ({((currentEpisode / 500) * 100).toFixed(1)}%)
-            </div>
-          </div>
-        )}
+        
 
         {/* Status Indicators */}
         {(isTraining || isPlaying) && (
@@ -1659,96 +1666,203 @@ ${testResults.averageScore >= 500 ? '🏆 Excellent' :
           </div>
         )}
 
-        {/* Game Visualization */}
-        <DndProvider backend={HTML5Backend}>
-          <div className="game-visualization" style={{
-            display: 'grid',
-            gridTemplateColumns: '2fr 1fr',
-            gap: '20px',
-            marginBottom: '20px'
-          }}>
-            {/* Game Board */}
-            <div className="game-area" style={{
-              background: 'rgba(139, 69, 19, 0.3)',
-              padding: '20px',
-              borderRadius: '12px',
-              border: '2px solid #8B4513'
+        {/* Game Visualization - Only show when visualTraining is enabled */}
+        {visualTraining && (
+          <DndProvider backend={HTML5Backend}>
+            <div className="game-visualization" style={{
+              display: 'grid',
+              gridTemplateColumns: '2fr 1fr',
+              gap: '20px',
+              marginBottom: '20px'
             }}>
-              <h4 style={{ color: '#FFD700', marginBottom: '15px', textAlign: 'center' }}>
-                🎯 Game Board
-              </h4>
-              
-              <GameBoard
-                grid={grid}
-                onBlockPlace={() => {}} // Disabled for AI training
-                availableBlocks={availableBlocks}
-                isPaused={false}
-                difficulty={difficulty}
-              />
-            </div>
-
-            {/* Game Info */}
-            <div className="game-info" style={{
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '15px'
-            }}>
-              {/* Score Display */}
-              <div style={{
+              {/* Game Board */}
+              <div className="game-area" style={{
                 background: 'rgba(139, 69, 19, 0.3)',
-                padding: '15px',
-                borderRadius: '8px',
-                border: '1px solid #8B4513'
+                padding: '20px',
+                borderRadius: '12px',
+                border: '2px solid #8B4513'
               }}>
-                <ScoreDisplay 
-                  score={score} 
-                  bestScore={bestScore} 
-                  linesCleared={Math.floor(score / 100)}
+                <h4 style={{ color: '#FFD700', marginBottom: '15px', textAlign: 'center' }}>
+                  🎯 Game Board
+                </h4>
+                
+                <GameBoard
+                  grid={grid}
+                  onBlockPlace={() => {}} // Disabled for AI training
+                  availableBlocks={availableBlocks}
+                  isPaused={false}
                   difficulty={difficulty}
                 />
               </div>
 
-              {/* Available Blocks */}
-              <div style={{
-                background: 'rgba(139, 69, 19, 0.3)',
-                padding: '15px',
-                borderRadius: '8px',
-                border: '1px solid #8B4513'
+              {/* Game Info */}
+              <div className="game-info" style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '15px'
               }}>
-                <h5 style={{ color: '#FFD700', marginBottom: '10px' }}>Available Blocks</h5>
-                <BlockTray blocks={availableBlocks} disabled={true} />
-              </div>
+                {/* Score Display */}
+                <div style={{
+                  background: 'rgba(139, 69, 19, 0.3)',
+                  padding: '15px',
+                  borderRadius: '8px',
+                  border: '1px solid #8B4513'
+                }}>
+                  <ScoreDisplay 
+                    score={score} 
+                    bestScore={bestScore} 
+                    linesCleared={linesCleared}
+                    difficulty={difficulty}
+                  />
+                </div>
 
-              {/* Episode Info */}
-              <div style={{
-                background: 'rgba(139, 69, 19, 0.3)',
-                padding: '15px',
-                borderRadius: '8px',
-                border: '1px solid #8B4513'
-              }}>
-                <h5 style={{ color: '#FFD700', marginBottom: '10px' }}>Episode Info</h5>
-                <div className="episode-stats">
-                  <div className="info-item" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
-                    <span style={{ color: '#D2B48C' }}>Episode:</span>
-                    <span style={{ color: '#FFD700', fontWeight: 'bold' }}>{currentEpisode}</span>
-                  </div>
-                  <div className="info-item" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
-                    <span style={{ color: '#D2B48C' }}>Score:</span>
-                    <span style={{ color: '#FFD700', fontWeight: 'bold' }}>{score}</span>
-                  </div>
-                  <div className="info-item" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
-                    <span style={{ color: '#D2B48C' }}>Steps:</span>
-                    <span style={{ color: '#FFD700', fontWeight: 'bold' }}>{episodeSteps}</span>
-                  </div>
-                  <div className="info-item" style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ color: '#D2B48C' }}>Algorithm:</span>
-                    <span style={{ color: '#FFD700', fontWeight: 'bold' }}>{algorithmConfigs[selectedAlgorithm].name}</span>
+                {/* Available Blocks */}
+                <div style={{
+                  background: 'rgba(139, 69, 19, 0.3)',
+                  padding: '15px',
+                  borderRadius: '8px',
+                  border: '1px solid #8B4513'
+                }}>
+                  <h5 style={{ color: '#FFD700', marginBottom: '10px' }}>Available Blocks</h5>
+                  <BlockTray blocks={availableBlocks} disabled={true} />
+                </div>
+
+                {/* Episode Info */}
+                <div style={{
+                  background: 'rgba(139, 69, 19, 0.3)',
+                  padding: '15px',
+                  borderRadius: '8px',
+                  border: '1px solid #8B4513'
+                }}>
+                  <h5 style={{ color: '#FFD700', marginBottom: '10px' }}>Episode Info</h5>
+                  <div className="episode-stats">
+                    <div className="info-item" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
+                      <span style={{ color: '#D2B48C' }}>Episode:</span>
+                      <span style={{ color: '#FFD700', fontWeight: 'bold' }}>{currentEpisode}</span>
+                    </div>
+                    <div className="info-item" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
+                      <span style={{ color: '#D2B48C' }}>Score:</span>
+                      <span style={{ color: '#FFD700', fontWeight: 'bold' }}>{score}</span>
+                    </div>
+                    <div className="info-item" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
+                      <span style={{ color: '#D2B48C' }}>Lines Cleared:</span>
+                      <span style={{ color: '#FFD700', fontWeight: 'bold' }}>{linesCleared}</span>
+                    </div>
+                    <div className="info-item" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
+                      <span style={{ color: '#D2B48C' }}>Steps:</span>
+                      <span style={{ color: '#FFD700', fontWeight: 'bold' }}>{episodeSteps}</span>
+                    </div>
+                    <div className="info-item" style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ color: '#D2B48C' }}>Algorithm:</span>
+                      <span style={{ color: '#FFD700', fontWeight: 'bold' }}>{algorithmConfigs[selectedAlgorithm].name}</span>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
+          </DndProvider>
+        )}
+
+        {/* Quick Stats when visualization is hidden */}
+        {!visualTraining && (isTraining || isPlaying) && (
+          <div style={{
+            background: 'rgba(139, 69, 19, 0.3)',
+            padding: '20px',
+            borderRadius: '12px',
+            border: '2px solid #8B4513',
+            marginBottom: '20px'
+          }}>
+            <h4 style={{ color: '#FFD700', marginBottom: '15px', textAlign: 'center' }}>
+              🚀 Training in Progress (Fast Mode) - {currentEpisode}/{maxEpisodes}
+            </h4>
+            
+            <div style={{ 
+              display: 'grid', 
+              gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', 
+              gap: '15px',
+              textAlign: 'center'
+            }}>
+              <div style={{
+                background: 'rgba(255, 215, 0, 0.1)',
+                padding: '15px',
+                borderRadius: '8px',
+                border: '1px solid #FFD700'
+              }}>
+                <div style={{ color: '#FFD700', fontWeight: 'bold', fontSize: '18px' }}>
+                  {currentEpisode}/{maxEpisodes}
+                </div>
+                <div style={{ color: '#D2B48C', fontSize: '12px' }}>
+                  Episode Progress ({((currentEpisode / maxEpisodes) * 100).toFixed(1)}%)
+                </div>
+              </div>
+              
+              <div style={{
+                background: 'rgba(255, 215, 0, 0.1)',
+                padding: '15px',
+                borderRadius: '8px',
+                border: '1px solid #FFD700'
+              }}>
+                <div style={{ color: '#28a745', fontWeight: 'bold', fontSize: '18px' }}>
+                  {score}
+                </div>
+                <div style={{ color: '#D2B48C', fontSize: '12px' }}>
+                  Current Score
+                </div>
+              </div>
+              
+                             <div style={{
+                 background: 'rgba(255, 215, 0, 0.1)',
+                 padding: '15px',
+                 borderRadius: '8px',
+                 border: '1px solid #FFD700'
+               }}>
+                 <div style={{ color: '#17a2b8', fontWeight: 'bold', fontSize: '18px' }}>
+                   {linesCleared}
+                 </div>
+                 <div style={{ color: '#D2B48C', fontSize: '12px' }}>
+                   Lines This Episode
+                 </div>
+               </div>
+               
+               <div style={{
+                 background: 'rgba(255, 215, 0, 0.1)',
+                 padding: '15px',
+                 borderRadius: '8px',
+                 border: '1px solid #FFD700'
+               }}>
+                 <div style={{ color: '#6f42c1', fontWeight: 'bold', fontSize: '18px' }}>
+                   {totalLinesCleared}
+                 </div>
+                 <div style={{ color: '#D2B48C', fontSize: '12px' }}>
+                   Total Lines Cleared
+                 </div>
+               </div>
+              
+              <div style={{
+                background: 'rgba(255, 215, 0, 0.1)',
+                padding: '15px',
+                borderRadius: '8px',
+                border: '1px solid #FFD700'
+              }}>
+                <div style={{ color: '#dc3545', fontWeight: 'bold', fontSize: '18px' }}>
+                  {bestScore}
+                </div>
+                <div style={{ color: '#D2B48C', fontSize: '12px' }}>
+                  Best Score
+                </div>
+              </div>
+            </div>
+            
+            <div style={{ 
+              marginTop: '15px', 
+              textAlign: 'center', 
+              color: '#D2B48C', 
+              fontSize: '14px' 
+            }}>
+              💡 Enable "Show Game Board" to see live visualization (slower training)
+            </div>
           </div>
-        </DndProvider>
+        )}
 
         {/* AI Visualization */}
         <div className="ai-visualization-section" style={{
