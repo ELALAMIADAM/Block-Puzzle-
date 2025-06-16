@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import * as tf from '@tensorflow/tfjs';
 import { EliteDQNAgent } from '../ai/EliteDQNAgent';
 import { EliteEnvironment } from '../ai/EliteEnvironment';
-import { runAITests } from '../ai/AITestRunner';
+
 import AIVisualization from './AIVisualization';
 import { generateRandomBlocks, checkGameOver } from '../utils/gameLogic';
 
@@ -218,141 +218,9 @@ function AITrainingPanel({
     }
   };
 
-  const startAIPlay = async () => {
-    if (!agent || !environment) {
-      console.log('🤖 Cannot start Elite AI play: Agent or environment not ready');
-      alert('Please start training first to initialize the Elite AI agent!');
-      return;
-    }
-    
-    if (isPlaying) {
-      console.log('🤖 Elite AI is already playing');
-      return;
-    }
-    
-    // 🔍 VERIFICATION: Confirm we're using the Elite AI system
-    console.log('🔍 VERIFYING ELITE AI SYSTEM:');
-    console.log(`✅ Agent Type: ${agent.constructor.name} (Elite)`);
-    console.log(`✅ Environment Type: ${environment.constructor.name} (Elite)`);
-    console.log(`✅ State Size: ${environment.getStateSize()} (Expected: 139)`);
-    console.log(`✅ Max Action Space: ${environment.getMaxActionSpace()} (Expected: 243)`);
-    console.log(`✅ Elite Features: ${agent.isElite ? 'CONFIRMED' : 'MISSING'}`);
-    console.log(`✅ Training Episodes: ${agent.episode}`);
-    console.log(`✅ Best Score: ${agent.bestScore}`);
-    console.log(`✅ Current Performance: ${agent.avgScore?.toFixed(1)} avg score`);
-    
-    console.log('🎮 Starting ELITE AI PLAY with advanced strategies...');
-    setIsPlaying(true);
-    setContinuousPlay(true);
-    
-    // Set environment to current game state
-    try {
-      environment.setState(grid, availableBlocks, score, difficulty);
-      console.log('🎮 Elite environment state updated successfully');
-      console.log(`🎮 Current game: Score=${score}, Blocks=${availableBlocks.length}, Difficulty=${difficulty}`);
-      
-      playIntervalRef.current = setInterval(async () => {
-        await makeEliteAIMove();
-      }, playSpeed);
-      
-      console.log(`🎮 Elite AI play started with ${playSpeed}ms interval`);
-      console.log('🏆 Watch the Elite AI demonstrate optimal play strategies!');
-    } catch (error) {
-      console.error('🎮 Error starting Elite AI play:', error);
-      setIsPlaying(false);
-      setContinuousPlay(false);
-    }
-  };
 
-  const stopAIPlay = () => {
-    setIsPlaying(false);
-    setContinuousPlay(false);
-    if (playIntervalRef.current) {
-      clearInterval(playIntervalRef.current);
-      playIntervalRef.current = null;
-    }
-    console.log('🛑 Elite AI play stopped');
-  };
 
-  const makeEliteAIMove = async () => {
-    if (!agent || !environment) {
-      console.log('🤖 Elite AI or environment not ready');
-      return;
-    }
-    
-    // If game is over, handle based on auto-play setting
-    if (gameOver) {
-      if (autoPlay) {
-        console.log('🎮 Game over - Elite AI auto-restarting...');
-        setTimeout(() => {
-          onResetGame();
-        }, 1000);
-      } else {
-        console.log('🎮 Game over - Stopping Elite AI play');
-        stopAIPlay();
-      }
-      return;
-    }
-    
-    try {
-      // Update environment with current game state
-      environment.setState(grid, availableBlocks, score, difficulty);
-      
-      const validActions = environment.getValidActions();
-      
-      if (validActions.length === 0) {
-        console.log('🤖 Elite AI: No valid moves available');
-        return;
-      }
-      
-      // ELITE AI DECISION MAKING
-      const state = environment.getState();
-      const action = await agent.selectBestAction(state, validActions); // Use exploitation only during play
-      
-      // Execute action in the game
-      const { blockIndex, row, col } = environment.decodeAction(action);
-      
-      if (blockIndex >= 0 && blockIndex < availableBlocks.length && availableBlocks[blockIndex]) {
-        const blockShape = availableBlocks[blockIndex];
-        
-        console.log(`🧠 Elite AI DECISION: Block ${blockIndex} at (${row}, ${col}) - Strategic placement`);
-        
-        // Execute the move in the actual game
-        const moveSuccess = onGameStateUpdate({
-          blockIndex,
-          row,
-          col,
-          blockShape: blockShape
-        });
-        
-        if (moveSuccess !== false) {
-          console.log(`✅ ELITE MOVE EXECUTED successfully`);
-        } else {
-          console.log(`❌ Elite move failed to execute - stopping AI play`);
-          stopAIPlay();
-          return;
-        }
-      } else {
-        console.log(`❌ Elite AI: Invalid block selection`);
-      }
-      
-      // Clean up state tensor
-      state.dispose();
-      
-    } catch (error) {
-      console.error('🤖 Elite AI move error:', error);
-    }
-  };
 
-  const saveModel = async () => {
-    if (!agent) return;
-    const success = await agent.saveModel(`elite-wood-block-dqn-${difficulty}`);
-    if (success) {
-      alert('Elite model saved to browser storage successfully!');
-    } else {
-      alert('Failed to save Elite model to browser storage.');
-    }
-  };
 
   const loadModel = async () => {
     if (!agent) return;
@@ -573,22 +441,7 @@ function AITrainingPanel({
     console.log('🔄 Elite AI system reset successfully');
   };
 
-  const runTests = async () => {
-    console.log('🧪 Running Elite AI system tests...');
-    try {
-      const results = await runAITests();
-      const allPassed = Object.values(results).every(result => result);
-      
-      if (allPassed) {
-        alert('✅ All Elite AI tests passed! System is working optimally.');
-      } else {
-        alert('❌ Some tests failed. Check the browser console for details.');
-      }
-    } catch (error) {
-      console.error('Test error:', error);
-      alert('❌ Test execution failed. Check the browser console for details.');
-    }
-  };
+
 
   const verifyEliteSystem = () => {
     console.log('🔍 ========== ELITE AI SYSTEM VERIFICATION ==========');
@@ -923,21 +776,7 @@ function AITrainingPanel({
           </div>
           
           <div className="button-group">
-            <button
-              onClick={startAIPlay}
-              disabled={isPlaying || !agent}
-              className="btn play-btn"
-            >
-              {isPlaying ? 'AI Playing...' : 'Start AI Play'}
-            </button>
-            
-            <button
-              onClick={stopAIPlay}
-              disabled={!isPlaying}
-              className="btn stop-btn"
-            >
-              Stop AI
-            </button>
+
           </div>
         </div>
         
@@ -948,13 +787,7 @@ function AITrainingPanel({
           </div>
           
           <div className="button-group">
-            <button
-              onClick={saveModel}
-              disabled={!agent}
-              className="btn save-btn"
-            >
-              💾 Save Model
-            </button>
+
             
             <button
               onClick={loadModel}
@@ -988,12 +821,7 @@ function AITrainingPanel({
               🔼 Upload Model
             </button>
             
-            <button
-              onClick={runTests}
-              className="btn test-btn"
-            >
-              🧪 Run Tests
-            </button>
+
             
             <button
               onClick={verifyEliteSystem}

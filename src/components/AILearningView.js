@@ -6,7 +6,7 @@ import { DQNEnvironment } from '../ai/DQNEnvironment';
 import { EliteDQNAgent } from '../ai/EliteDQNAgent';
 import { EliteEnvironment } from '../ai/EliteEnvironment';
 import { AlgorithmSelector } from '../ai/AdvancedAIAgents';
-import { runAITests } from '../ai/AITestRunner';
+
 import AIVisualization from './AIVisualization';
 import GameBoard from './GameBoard';
 import BlockTray from './BlockTray';
@@ -231,135 +231,6 @@ function AILearningView({ onNavigate }) {
     console.log(`🔄 ${algorithmConfigs[selectedAlgorithm].name} training reset`);
   };
 
-  const startAIPlay = async () => {
-    if (!agent || !environment) return;
-    
-    setIsPlaying(true);
-    console.log(`🎮 Starting ${algorithmConfigs[selectedAlgorithm].name} gameplay...`);
-    
-    // Reset environment to current game state
-    environment.setState(grid, availableBlocks, score, difficulty);
-    
-    while (isPlaying && !gameOver) {
-      await makeAIMove();
-      await new Promise(resolve => setTimeout(resolve, 1000)); // 1 second between moves
-    }
-    
-    setIsPlaying(false);
-  };
-
-  const stopAIPlay = () => {
-    setIsPlaying(false);
-    console.log(`⏹️ ${algorithmConfigs[selectedAlgorithm].name} gameplay stopped`);
-  };
-
-  const makeAIMove = async () => {
-    if (!agent || !environment || !isPlaying) return;
-    
-    try {
-      const validActions = environment.getValidActions();
-      
-      if (validActions.length === 0) {
-        console.log('🎮 No valid actions available, stopping AI play');
-        stopAIPlay();
-        return;
-      }
-      
-      // Get state using DQNEnvironment method
-      let state = environment.getState(); // DQNEnvironment always has getState() method
-      
-      let action;
-      
-      // Algorithm-specific action selection for gameplay
-      switch (selectedAlgorithm) {
-        case 'mcts':
-          action = await agent.selectAction(environment);
-          break;
-        case 'policy-gradient':
-          action = await agent.selectAction(state, validActions);
-          break;
-        case 'heuristic':
-          action = await agent.selectAction(environment);
-          break;
-        case 'elite-dqn':
-          action = await agent.act(state, validActions, environment);
-          break;
-        case 'dqn':
-        default:
-          action = await agent.act(state, validActions, environment);
-          break;
-      }
-      
-      if (action === null || action === undefined) {
-        console.warn(`⚠️ ${selectedAlgorithm} returned null action during play`);
-        action = validActions[Math.floor(Math.random() * validActions.length)];
-      }
-      
-      const stepResult = environment.step(action);
-      
-      // CRITICAL: Use REAL game score, not AI rewards
-      const realGameScore = environment.score;
-      
-      // Update visual state with REAL game performance
-      setGrid(environment.grid.map(row => [...row]));
-      setAvailableBlocks(environment.availableBlocks.map(block => block.map(row => [...row])));
-      setScore(realGameScore); // Use real game score
-      setLinesCleared(environment.lineClearsThisEpisode || 0); // Track actual lines cleared
-      setBestScore(Math.max(bestScore, realGameScore)); // Use real game score
-      
-      // Check if game is over
-      if (stepResult.done || environment.gameOver) {
-        console.log(`🎮 Game Over! REAL Final Score: ${realGameScore} (Algorithm: ${selectedAlgorithm})`);
-        stopAIPlay();
-        
-        // Update agent stats with REAL game score
-        if (agent.endEpisode && typeof agent.endEpisode === 'function') {
-          switch (selectedAlgorithm) {
-            case 'policy-gradient':
-              await agent.endEpisode(realGameScore); // Use real game score
-              break;
-            case 'mcts':
-            case 'heuristic':
-              agent.endEpisode(realGameScore); // Use real game score
-              break;
-            case 'elite-dqn':
-            case 'dqn':
-            default:
-              agent.endEpisode(stepResult.reward, realGameScore, environment); // Reward for AI, real score for comparison
-              break;
-          }
-        }
-        
-        // Update training stats
-        if (agent.getStats && typeof agent.getStats === 'function') {
-          const stats = agent.getStats();
-          stats.lastGameScore = realGameScore; // Ensure real score is tracked
-          setTrainingStats(stats);
-        }
-      }
-      
-      // Add new blocks when needed - use DQNEnvironment's curriculum blocks
-      if (environment.availableBlocks.length === 0 && !stepResult.done) {
-        environment.availableBlocks = environment.generateCurriculumBlocks(); // DQNEnvironment method
-        setAvailableBlocks(environment.availableBlocks.map(block => block.map(row => [...row])));
-        
-        if (environment.checkGameOver()) {
-          console.log('🎮 No more moves possible, stopping AI play');
-          stopAIPlay();
-        }
-      }
-      
-      // Clean up state tensor
-      if (state && state.dispose && typeof state.dispose === 'function') {
-        state.dispose();
-      }
-      
-    } catch (error) {
-      console.error(`❌ AI move error for ${selectedAlgorithm}:`, error);
-      stopAIPlay();
-    }
-  };
-
   const runTrainingEpisode = async () => {
     if (!agent || !environment) return;
     
@@ -567,77 +438,6 @@ function AILearningView({ onNavigate }) {
     }
   };
 
-  const saveModel = async () => {
-    if (!agent) {
-      alert('No agent available to save!');
-      return;
-    }
-    
-    try {
-      const algorithmName = algorithmConfigs[selectedAlgorithm].name;
-      const modelName = `${selectedAlgorithm}-model-${Date.now()}`;
-      
-      console.log(`💾 Saving ${algorithmName} model...`);
-      
-      let success = false;
-      
-      switch (selectedAlgorithm) {
-        case 'mcts':
-        case 'heuristic':
-          // For non-neural algorithms, save stats and configuration
-          const agentData = {
-            algorithm: selectedAlgorithm,
-            stats: agent.getStats(),
-            timestamp: new Date().toISOString(),
-            version: '1.0'
-          };
-          
-          localStorage.setItem(modelName, JSON.stringify(agentData));
-          success = true;
-          console.log(`✅ ${algorithmName} configuration saved to localStorage`);
-          break;
-          
-        case 'policy-gradient':
-          // Save policy gradient model if it has neural networks
-          if (agent.saveModel && typeof agent.saveModel === 'function') {
-            success = await agent.saveModel(modelName);
-          } else {
-            // Fallback to stats saving
-            const pgData = {
-              algorithm: selectedAlgorithm,
-              stats: agent.getStats(),
-              timestamp: new Date().toISOString(),
-              version: '1.0'
-            };
-            localStorage.setItem(modelName, JSON.stringify(pgData));
-            success = true;
-          }
-          break;
-          
-        case 'elite-dqn':
-        case 'dqn':
-        default:
-          // Save neural network models
-          if (agent.saveModel && typeof agent.saveModel === 'function') {
-            success = await agent.saveModel(modelName);
-          } else {
-            throw new Error('Agent does not support model saving');
-          }
-          break;
-      }
-      
-      if (success) {
-        alert(`✅ ${algorithmName} model saved successfully!\n\nModel: ${modelName}\nAlgorithm: ${algorithmName}\nBest Score: ${agent.getStats().bestScore || 0}`);
-      } else {
-        throw new Error('Model saving failed');
-      }
-      
-    } catch (error) {
-      console.error('❌ Model save error:', error);
-      alert(`❌ Failed to save ${algorithmConfigs[selectedAlgorithm].name} model: ${error.message}`);
-    }
-  };
-
   const loadModel = async () => {
     if (!agent) {
       alert('No agent available to load into!');
@@ -733,52 +533,6 @@ function AILearningView({ onNavigate }) {
     } catch (error) {
       console.error('❌ Model load error:', error);
       alert(`❌ Failed to load ${algorithmConfigs[selectedAlgorithm].name} model: ${error.message}`);
-    }
-  };
-
-  const runTests = async () => {
-    console.log('🧪 Running comprehensive AI algorithm tests...');
-    
-    if (!agent || !environment) {
-      alert('No trained agent available to test!');
-      return;
-    }
-    
-    try {
-      // Run the proper algorithm test
-      const testResults = await testAlgorithm();
-      
-      // Also run the system integration tests
-      const systemResults = await runAITests();
-      const allSystemTestsPassed = Object.values(systemResults).every(result => result);
-      
-      const combinedMessage = `🧪 COMPREHENSIVE TEST RESULTS:
-
-🎯 ALGORITHM PERFORMANCE TEST:
-${testResults.algorithmName}
-• Average Score: ${testResults.averageScore.toFixed(1)}
-• Best Score: ${testResults.bestScore}
-• Games Completed: ${testResults.gamesCompleted}/10
-
-🔧 SYSTEM INTEGRATION TESTS:
-${allSystemTestsPassed ? '✅ All system tests passed!' : '❌ Some system tests failed - check console'}
-
-📊 OVERALL ASSESSMENT:
-${testResults.averageScore >= 200 && allSystemTestsPassed ? 
-  '🏆 EXCELLENT - Algorithm is well-trained and system is stable' :
-  testResults.averageScore >= 100 && allSystemTestsPassed ?
-  '🥈 GOOD - Algorithm shows promise, system is stable' :
-  allSystemTestsPassed ?
-  '📈 FAIR - System works but algorithm needs more training' :
-  '⚠️ ISSUES DETECTED - Check console for details'
-}`;
-
-      console.log(combinedMessage);
-      alert(combinedMessage);
-      
-    } catch (error) {
-      console.error('❌ Test execution failed:', error);
-      alert(`❌ Test execution failed: ${error.message}`);
     }
   };
 
@@ -926,151 +680,6 @@ ${testResults.averageScore >= 200 && allSystemTestsPassed ?
     }
   };
 
-  // NEW: Proper testing function for fair algorithm comparison
-  const testAlgorithm = async () => {
-    if (!agent || !environment) {
-      alert('No trained agent available to test!');
-      return;
-    }
-
-    console.log(`🧪 Testing ${algorithmConfigs[selectedAlgorithm].name}...`);
-    
-    const testResults = {
-      algorithm: selectedAlgorithm,
-      algorithmName: algorithmConfigs[selectedAlgorithm].name,
-      scores: [],
-      averageScore: 0,
-      bestScore: 0,
-      worstScore: Infinity,
-      gamesCompleted: 0,
-      totalMoves: 0
-    };
-
-    const numTestGames = 10; // Test with 10 games for fair comparison
-    
-    for (let gameNum = 0; gameNum < numTestGames; gameNum++) {
-      console.log(`🎯 Test Game ${gameNum + 1}/${numTestGames} for ${algorithmConfigs[selectedAlgorithm].name}`);
-      
-      // Reset environment for each test game
-      environment.reset();
-      
-      let gameScore = 0;
-      let moves = 0;
-      let done = false;
-      const maxMoves = 100; // Prevent infinite games
-      
-      // Get initial state
-      let state = environment.getState(); // DQNEnvironment always has getState() method
-      
-      while (!done && moves < maxMoves) {
-        const validActions = environment.getValidActions();
-        
-        if (validActions.length === 0) {
-          done = true;
-          break;
-        }
-        
-        let action;
-        
-        // Use trained agent to select action (NO EXPLORATION - pure exploitation)
-        try {
-          switch (selectedAlgorithm) {
-            case 'mcts':
-              action = await agent.selectAction(environment);
-              break;
-            case 'policy-gradient':
-              action = await agent.selectAction(state, validActions);
-              break;
-            case 'heuristic':
-              action = await agent.selectAction(environment);
-              break;
-            case 'elite-dqn':
-              // Force exploitation mode for testing
-              const oldEpsilon = agent.epsilon;
-              agent.epsilon = 0; // No exploration during testing
-              action = await agent.act(state, validActions, environment);
-              agent.epsilon = oldEpsilon; // Restore original epsilon
-              break;
-            case 'dqn':
-            default:
-              // Force exploitation mode for testing
-              const oldEps = agent.epsilon;
-              agent.epsilon = 0; // No exploration during testing
-              action = await agent.act(state, validActions, environment);
-              agent.epsilon = oldEps; // Restore original epsilon
-              break;
-          }
-        } catch (error) {
-          console.warn(`⚠️ Error during testing, using random action:`, error);
-          action = validActions[Math.floor(Math.random() * validActions.length)];
-        }
-        
-        if (action === null || action === undefined) {
-          action = validActions[Math.floor(Math.random() * validActions.length)];
-        }
-        
-        const stepResult = environment.step(action);
-        gameScore = environment.score; // Use REAL game score
-        state = stepResult.state;
-        done = stepResult.done;
-        moves++;
-        
-        // Add new blocks when needed - use DQNEnvironment's curriculum blocks
-        if (environment.availableBlocks.length === 0 && !done) {
-          environment.availableBlocks = environment.generateCurriculumBlocks(); // DQNEnvironment method
-          done = environment.checkGameOver();
-        }
-        
-        // Clean up state tensor
-        if (state && state.dispose && typeof state.dispose === 'function') {
-          state.dispose();
-        }
-      }
-      
-      // Record REAL game results
-      testResults.scores.push(gameScore);
-      testResults.totalMoves += moves;
-      testResults.gamesCompleted++;
-      testResults.bestScore = Math.max(testResults.bestScore, gameScore);
-      testResults.worstScore = Math.min(testResults.worstScore, gameScore);
-      
-      console.log(`✅ Test Game ${gameNum + 1} completed: Score=${gameScore}, Moves=${moves}`);
-    }
-    
-    // Calculate final statistics
-    testResults.averageScore = testResults.scores.reduce((a, b) => a + b, 0) / testResults.scores.length;
-    testResults.averageMoves = testResults.totalMoves / testResults.gamesCompleted;
-    
-    // Display results
-    const resultMessage = `🧪 TEST RESULTS for ${testResults.algorithmName}:
-
-📊 Performance Summary:
-• Games Played: ${testResults.gamesCompleted}
-• Average Score: ${testResults.averageScore.toFixed(1)}
-• Best Score: ${testResults.bestScore}
-• Worst Score: ${testResults.worstScore}
-• Average Moves: ${testResults.averageMoves.toFixed(1)}
-
-📈 Score Distribution:
-${testResults.scores.map((score, i) => `Game ${i + 1}: ${score}`).join('\n')}
-
-🎯 Performance Rating:
-${testResults.averageScore >= 500 ? '🏆 Excellent' : 
-  testResults.averageScore >= 200 ? '🥈 Good' : 
-  testResults.averageScore >= 100 ? '🥉 Fair' : '📈 Needs Training'}`;
-
-    console.log(resultMessage);
-    alert(resultMessage);
-    
-    // Store test results for comparison
-    setTestResults(prev => ({
-      ...prev,
-      [selectedAlgorithm]: testResults
-    }));
-    
-    return testResults;
-  };
-
   const TipsModal = () => (
     <div className="tips-modal-overlay" onClick={() => setShowTips(false)}>
       <div className="tips-modal" onClick={(e) => e.stopPropagation()}>
@@ -1186,22 +795,6 @@ ${testResults.averageScore >= 500 ? '🏆 Excellent' :
                 </option>
               ))}
             </select>
-            
-            <button
-              onClick={runTests}
-              disabled={isTraining || isPlaying}
-              style={{
-                padding: '12px 20px',
-                borderRadius: '8px',
-                border: 'none',
-                background: 'linear-gradient(145deg, #28a745, #20c997)',
-                color: 'white',
-                fontWeight: 'bold',
-                cursor: 'pointer'
-              }}
-            >
-              🧪 Run Tests
-            </button>
           </div>
           
           <div style={{
@@ -1404,182 +997,211 @@ ${testResults.averageScore >= 500 ? '🏆 Excellent' :
             </div>
           </div>
 
+          {/* Model Management Section with Improved UI */}
           <div className="control-group">
-            <div style={{ display: 'flex', gap: '10px' }}>
-              {!isPlaying ? (
+            <label style={{ 
+              color: '#FFD700', 
+              fontWeight: 'bold', 
+              marginBottom: '12px', 
+              display: 'block',
+              fontSize: '16px',
+              textAlign: 'center'
+            }}>
+              💾 Model Management
+            </label>
+            
+            <div style={{ display: 'flex', gap: '15px', justifyContent: 'center', flexWrap: 'wrap' }}>
+               <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
+                  <button
+                    onClick={loadModel}
+                    disabled={!agent || isTraining || isPlaying}
+                    className="btn load"
+                    style={{
+                      flex: 1,
+                      padding: '15px 25px',
+                      borderRadius: '12px',
+                      border: 'none',
+                      background: 'linear-gradient(145deg, #fd7e14, #e8590c)',
+                      color: 'white',
+                      fontWeight: 'bold',
+                      fontSize: '14px',
+                      boxShadow: '0 4px 12px rgba(253, 126, 20, 0.3)',
+                      transition: 'all 0.3s ease',
+                      cursor: (!agent || isTraining || isPlaying) ? 'not-allowed' : 'pointer',
+                      opacity: (!agent || isTraining || isPlaying) ? 0.6 : 1
+                    }}
+                    onMouseOver={(e) => {
+                      if (!(!agent || isTraining || isPlaying)) {
+                        e.target.style.transform = 'translateY(-2px)';
+                        e.target.style.boxShadow = '0 6px 16px rgba(253, 126, 20, 0.4)';
+                      }
+                    }}
+                    onMouseOut={(e) => {
+                      if (!(!agent || isTraining || isPlaying)) {
+                        e.target.style.transform = 'translateY(0)';
+                        e.target.style.boxShadow = '0 4px 12px rgba(253, 126, 20, 0.3)';
+                      }
+                    }}
+                  >
+                    📁 Load Model
+                  </button>
+               </div>
+                
                 <button
-                  onClick={startAIPlay}
-                  disabled={isTraining || !agent}
-                  className="btn info"
+                  onClick={downloadModel}
+                  disabled={!agent || isTraining || isPlaying}
+                  className="btn download"
                   style={{
-                    flex: 1,
-                    padding: '12px',
-                    borderRadius: '8px',
+                    padding: '15px 25px',
+                    borderRadius: '12px',
                     border: 'none',
                     background: 'linear-gradient(145deg, #17a2b8, #138496)',
                     color: 'white',
-                    fontWeight: 'bold'
-                  }}
-                >
-                  🎮 Start AI Play
-                </button>
-              ) : (
-                <button
-                  onClick={stopAIPlay}
-                  className="btn danger"
-                  style={{
-                    flex: 1,
-                    padding: '12px',
-                    borderRadius: '8px',
-                    border: 'none',
-                    background: 'linear-gradient(145deg, #dc3545, #c82333)',
-                    color: 'white',
-                    fontWeight: 'bold'
-                  }}
-                >
-                  ⏹️ Stop AI Play
-                </button>
-              )}
-            </div>
-          </div>
-
-          <div className="control-group">
-            <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
-              <button
-                onClick={saveModel}
-                disabled={!agent || isTraining || isPlaying}
-                className="btn save"
-                style={{
-                  flex: 1,
-                  padding: '12px',
-                  borderRadius: '8px',
-                  border: 'none',
-                  background: 'linear-gradient(145deg, #6f42c1, #5a32a3)',
-                  color: 'white',
-                  fontWeight: 'bold'
-                }}
-              >
-                💾 Save
-              </button>
-              <button
-                onClick={loadModel}
-                disabled={!agent || isTraining || isPlaying}
-                className="btn load"
-                style={{
-                  flex: 1,
-                  padding: '12px',
-                  borderRadius: '8px',
-                  border: 'none',
-                  background: 'linear-gradient(145deg, #fd7e14, #e8590c)',
-                  color: 'white',
-                  fontWeight: 'bold'
-                }}
-              >
-                📁 Load
-              </button>
-            </div>
-            <div style={{ display: 'flex', gap: '10px' }}>
-              <button
-                onClick={downloadModel}
-                disabled={!agent || isTraining || isPlaying}
-                className="btn download"
-                style={{
-                  flex: 1,
-                  padding: '12px',
-                  borderRadius: '8px',
-                  border: 'none',
-                  background: 'linear-gradient(145deg, #17a2b8, #138496)',
-                  color: 'white',
-                  fontWeight: 'bold'
-                }}
-              >
-                🔽 Download
-              </button>
-              <button
-                onClick={runTests}
-                disabled={isTraining || isPlaying}
-                className="btn test"
-                style={{
-                  flex: 1,
-                  padding: '12px',
-                  borderRadius: '8px',
-                  border: 'none',
-                  background: 'linear-gradient(145deg, #28a745, #1e7e34)',
-                  color: 'white',
-                  fontWeight: 'bold'
-                }}
-              >
-                🧪 Test
-              </button>
-            </div>
-          </div>
-
-          <div className="control-group">
-            <div style={{ display: 'flex', gap: '10px' }}>
-              <button
-                onClick={testAlgorithm}
-                disabled={!agent || isTraining || isPlaying}
-                className="btn test-performance"
-                style={{
-                  flex: 1,
-                  padding: '12px',
-                  borderRadius: '8px',
-                  border: 'none',
-                  background: 'linear-gradient(145deg, #e74c3c, #c0392b)',
-                  color: 'white',
-                  fontWeight: 'bold'
-                }}
-              >
-                🎯 Test Performance
-              </button>
-            </div>
-          </div>
-
-          <div className="control-group">
-            <label style={{ color: '#FFD700', fontWeight: 'bold', marginBottom: '8px', display: 'block' }}>
-              Max Episodes: {maxEpisodes}
-            </label>
-            <input
-              type="number"
-              min="10"
-              max="10000"
-              value={maxEpisodes}
-              onChange={(e) => setMaxEpisodes(parseInt(e.target.value))}
-              disabled={isTraining}
-              style={{
-                width: '100%',
-                padding: '8px',
-                borderRadius: '6px',
-                border: '2px solid #8B4513',
-                background: 'rgba(255, 215, 0, 0.1)',
-                color: '#FFD700',
-                fontSize: '14px',
-                fontWeight: 'bold',
-                marginBottom: '8px'
-              }}
-            />
-            <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
-              {[100, 500, 1000, 2000, 5000].map(episodes => (
-                <button
-                  key={episodes}
-                  onClick={() => setMaxEpisodes(episodes)}
-                  disabled={isTraining}
-                  style={{
-                    padding: '4px 8px',
-                    borderRadius: '4px',
-                    border: 'none',
-                    background: maxEpisodes === episodes 
-                      ? 'linear-gradient(145deg, #FFD700, #FFA500)' 
-                      : 'rgba(139, 69, 19, 0.5)',
-                    color: maxEpisodes === episodes ? '#2C1810' : '#D2B48C',
-                    fontSize: '10px',
                     fontWeight: 'bold',
-                    cursor: 'pointer'
+                    fontSize: '14px',
+                    boxShadow: '0 4px 12px rgba(23, 162, 184, 0.3)',
+                    transition: 'all 0.3s ease',
+                    cursor: (!agent || isTraining || isPlaying) ? 'not-allowed' : 'pointer',
+                    opacity: (!agent || isTraining || isPlaying) ? 0.6 : 1
+                  }}
+                  onMouseOver={(e) => {
+                    if (!(!agent || isTraining || isPlaying)) {
+                      e.target.style.transform = 'translateY(-2px)';
+                      e.target.style.boxShadow = '0 6px 16px rgba(23, 162, 184, 0.4)';
+                    }
+                  }}
+                  onMouseOut={(e) => {
+                    if (!(!agent || isTraining || isPlaying)) {
+                      e.target.style.transform = 'translateY(0)';
+                      e.target.style.boxShadow = '0 4px 12px rgba(23, 162, 184, 0.3)';
+                    }
                   }}
                 >
-                  {episodes}
+                  🔽 Download Model
                 </button>
-              ))}
+            </div>
+            
+            <div style={{
+              textAlign: 'center',
+              marginTop: '10px',
+              fontSize: '11px',
+              color: '#D2B48C',
+              fontStyle: 'italic'
+            }}>
+              💡 Load: Restore saved models • Download: Save trained models to files
+            </div>
+          </div>
+
+          {/* Improved Episode Input Section */}
+          <div className="control-group">
+            <label style={{ 
+              color: '#FFD700', 
+              fontWeight: 'bold', 
+              marginBottom: '12px', 
+              display: 'block',
+              fontSize: '16px'
+            }}>
+              📊 Training Episodes: {maxEpisodes.toLocaleString()}
+            </label>
+            
+            <div style={{
+              background: 'rgba(139, 69, 19, 0.3)',
+              padding: '15px',
+              borderRadius: '12px',
+              border: '2px solid #8B4513',
+              marginBottom: '15px'
+            }}>
+              <input
+                type="number"
+                min="10"
+                max="10000"
+                value={maxEpisodes}
+                onChange={(e) => setMaxEpisodes(parseInt(e.target.value))}
+                disabled={isTraining}
+                style={{
+                  width: '100%',
+                  padding: '12px 16px',
+                  borderRadius: '8px',
+                  border: '2px solid #8B4513',
+                  background: 'rgba(255, 215, 0, 0.1)',
+                  color: '#FFD700',
+                  fontSize: '16px',
+                  fontWeight: 'bold',
+                  textAlign: 'center',
+                  outline: 'none',
+                  transition: 'all 0.3s ease'
+                }}
+                onFocus={(e) => {
+                  e.target.style.borderColor = '#FFD700';
+                  e.target.style.boxShadow = '0 0 10px rgba(255, 215, 0, 0.3)';
+                }}
+                onBlur={(e) => {
+                  e.target.style.borderColor = '#8B4513';
+                  e.target.style.boxShadow = 'none';
+                }}
+              />
+              
+              {/* Quick Preset Buttons */}
+              <div style={{ 
+                display: 'flex', 
+                gap: '8px', 
+                flexWrap: 'wrap', 
+                marginTop: '12px',
+                justifyContent: 'center'
+              }}>
+                {[100, 500, 1000, 2000, 5000].map(episodes => (
+                  <button
+                    key={episodes}
+                    onClick={() => setMaxEpisodes(episodes)}
+                    disabled={isTraining}
+                    style={{
+                      padding: '8px 12px',
+                      borderRadius: '8px',
+                      border: 'none',
+                      background: maxEpisodes === episodes 
+                        ? 'linear-gradient(145deg, #FFD700, #FFA500)' 
+                        : 'linear-gradient(145deg, rgba(139, 69, 19, 0.6), rgba(101, 50, 15, 0.8))',
+                      color: maxEpisodes === episodes ? '#2C1810' : '#D2B48C',
+                      fontSize: '12px',
+                      fontWeight: 'bold',
+                      cursor: isTraining ? 'not-allowed' : 'pointer',
+                      transition: 'all 0.2s ease',
+                      boxShadow: maxEpisodes === episodes 
+                        ? '0 2px 8px rgba(255, 215, 0, 0.3)' 
+                        : '0 2px 4px rgba(0, 0, 0, 0.2)',
+                      opacity: isTraining ? 0.6 : 1
+                    }}
+                    onMouseOver={(e) => {
+                      if (!isTraining) {
+                        e.target.style.transform = 'translateY(-1px)';
+                        e.target.style.boxShadow = maxEpisodes === episodes 
+                          ? '0 4px 12px rgba(255, 215, 0, 0.4)' 
+                          : '0 4px 8px rgba(0, 0, 0, 0.3)';
+                      }
+                    }}
+                    onMouseOut={(e) => {
+                      if (!isTraining) {
+                        e.target.style.transform = 'translateY(0)';
+                        e.target.style.boxShadow = maxEpisodes === episodes 
+                          ? '0 2px 8px rgba(255, 215, 0, 0.3)' 
+                          : '0 2px 4px rgba(0, 0, 0, 0.2)';
+                      }
+                    }}
+                  >
+                    {episodes.toLocaleString()}
+                  </button>
+                ))}
+              </div>
+              
+              <div style={{
+                textAlign: 'center',
+                marginTop: '10px',
+                fontSize: '11px',
+                color: '#D2B48C',
+                fontStyle: 'italic'
+              }}>
+                💡 Start with 100-500 episodes for initial learning, then increase for better performance
+              </div>
             </div>
           </div>
 
