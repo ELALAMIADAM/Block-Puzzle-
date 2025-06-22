@@ -1,45 +1,35 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useCallback } from 'react';
 
 function AIVisualization({ trainingStats, isTraining, compact = false, showOnlyNetwork = false }) {
-  const chartRef = useRef(null);
-  const networkRef = useRef(null);
   const scoreChartRef = useRef(null);
   const rewardChartRef = useRef(null);
   const lossChartRef = useRef(null);
+  const networkRef = useRef(null);
 
-  useEffect(() => {
-    if (!trainingStats || Object.keys(trainingStats).length === 0) return;
-
-    // Clear existing charts
-    if (chartRef.current) chartRef.current.innerHTML = '';
-    if (networkRef.current) networkRef.current.innerHTML = '';
-    if (scoreChartRef.current) scoreChartRef.current.innerHTML = '';
-    if (rewardChartRef.current) rewardChartRef.current.innerHTML = '';
-    if (lossChartRef.current) lossChartRef.current.innerHTML = '';
-
-    // Draw appropriate charts based on algorithm and available data
-    if (!showOnlyNetwork) {
-      if (trainingStats.scores && trainingStats.scores.length > 0) {
-        drawScoreChart();
-      }
-      if (trainingStats.rewards && trainingStats.rewards.length > 0) {
-        drawRewardChart();
-      }
-      if (trainingStats.losses && trainingStats.losses.length > 0 && trainingStats.supportsTraining) {
-        drawLossChart();
-      }
+  const getMovingAverage = useCallback((data, windowSize = 10) => {
+    const result = [];
+    for (let i = windowSize - 1; i < data.length; i++) {
+      const window = data.slice(i - windowSize + 1, i + 1);
+      const average = window.reduce((sum, val) => sum + val, 0) / windowSize;
+      result.push(average);
     }
-    
-    // Draw network visualization for DQN variants
-    if (trainingStats.algorithm && (
-      trainingStats.algorithm.includes('DQN') || 
-      trainingStats.algorithm.includes('Policy')
-    )) {
-      drawNetworkVisualization();
+    return result;
+  }, []);
+
+  const formatNumber = useCallback((num) => {
+    if (typeof num !== 'number' || isNaN(num)) return '0';
+    if (num >= 1000000) {
+      return (num / 1000000).toFixed(1) + 'M';
+    } else if (num >= 1000) {
+      return (num / 1000).toFixed(1) + 'K';
+    } else if (num >= 1) {
+      return num.toFixed(0);
+    } else {
+      return num.toFixed(2);
     }
-  }, [trainingStats, compact, showOnlyNetwork]);
-    
-  const drawScoreChart = () => {
+  }, []);
+
+  const drawScoreChart = useCallback(() => {
     if (!trainingStats.scores || trainingStats.scores.length === 0) return;
     
     const canvas = document.createElement('canvas');
@@ -149,9 +139,9 @@ function AIVisualization({ trainingStats, isTraining, compact = false, showOnlyN
     ctx.font = '12px Arial';
     ctx.fillText(`Current: ${formatNumber(currentScore)} | Avg: ${formatNumber(avgScore)} | Best: ${formatNumber(trainingStats.bestScore)}`, 
                 canvas.width / 2, canvas.height - 5);
-  };
+  }, [trainingStats, compact, getMovingAverage, formatNumber]);
 
-  const drawRewardChart = () => {
+  const drawRewardChart = useCallback(() => {
     if (!trainingStats.rewards || trainingStats.rewards.length === 0) return;
     
     const canvas = document.createElement('canvas');
@@ -261,9 +251,9 @@ function AIVisualization({ trainingStats, isTraining, compact = false, showOnlyN
     ctx.font = '12px Arial';
     ctx.fillText(`Current: ${formatNumber(currentReward)} | Avg: ${formatNumber(avgReward)}`, 
                 canvas.width / 2, canvas.height - 5);
-  };
+  }, [trainingStats, compact, getMovingAverage, formatNumber]);
 
-  const drawLossChart = () => {
+  const drawLossChart = useCallback(() => {
     if (!trainingStats.losses || trainingStats.losses.length === 0) return;
     
     const canvas = document.createElement('canvas');
@@ -360,9 +350,9 @@ function AIVisualization({ trainingStats, isTraining, compact = false, showOnlyN
     ctx.font = '12px Arial';
     ctx.fillText(`Current: ${formatNumber(currentLoss)} | Avg: ${formatNumber(avgLoss)}`, 
                 canvas.width / 2, canvas.height - 5);
-  };
+  }, [trainingStats, compact, getMovingAverage, formatNumber]);
 
-  const drawNetworkVisualization = () => {
+  const drawNetworkVisualization = useCallback(() => {
     if (!trainingStats.algorithm) return;
     
     const canvas = document.createElement('canvas');
@@ -479,33 +469,7 @@ function AIVisualization({ trainingStats, isTraining, compact = false, showOnlyN
       ctx.textAlign = 'left';
       ctx.fillText(indicator.text, 10, canvas.height - 30 + index * 12);
     });
-  };
-
-  const getMovingAverage = (data, windowSize = 10) => {
-    if (data.length < windowSize) return [];
-    
-    const result = [];
-    for (let i = windowSize - 1; i < data.length; i++) {
-      const window = data.slice(i - windowSize + 1, i + 1);
-      const average = window.reduce((sum, val) => sum + val, 0) / windowSize;
-      result.push(average);
-    }
-    return result;
-  };
-
-  const formatNumber = (num) => {
-    if (typeof num !== 'number' || isNaN(num)) return '0';
-    
-    if (Math.abs(num) >= 1000000) {
-      return (num / 1000000).toFixed(1) + 'M';
-    } else if (Math.abs(num) >= 1000) {
-      return (num / 1000).toFixed(1) + 'K';
-    } else if (Math.abs(num) >= 1) {
-      return num.toFixed(1);
-    } else {
-      return num.toFixed(3);
-    }
-  };
+  }, [trainingStats, isTraining, compact]);
 
   // Algorithm-specific performance indicators
   const getPerformanceIndicator = () => {
@@ -561,6 +525,32 @@ function AIVisualization({ trainingStats, isTraining, compact = false, showOnlyN
     if (trainingStats.episode < 500) return { text: 'Learning', color: '#9C27B0' };
     return { text: 'Experienced', color: '#4CAF50' };
   };
+
+  useEffect(() => {
+    // Clear previous charts
+    if (scoreChartRef.current) scoreChartRef.current.innerHTML = '';
+    if (rewardChartRef.current) rewardChartRef.current.innerHTML = '';
+    if (lossChartRef.current) lossChartRef.current.innerHTML = '';
+    if (networkRef.current) networkRef.current.innerHTML = '';
+
+    // Draw charts if we have data
+    if (trainingStats && trainingStats.scores && trainingStats.scores.length > 0) {
+      drawScoreChart();
+      drawRewardChart();
+    }
+    
+    if (trainingStats && trainingStats.losses && trainingStats.losses.length > 0) {
+      drawLossChart();
+    }
+    
+    // Draw network visualization for neural network algorithms
+    if (!showOnlyNetwork && trainingStats && trainingStats.algorithm && (
+      trainingStats.algorithm.includes('DQN') || 
+      trainingStats.algorithm.includes('Policy')
+    )) {
+      drawNetworkVisualization();
+    }
+  }, [trainingStats, compact, showOnlyNetwork, drawScoreChart, drawRewardChart, drawLossChart, drawNetworkVisualization]);
 
   if (!trainingStats || Object.keys(trainingStats).length === 0) {
     return (

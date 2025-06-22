@@ -719,7 +719,7 @@ export class EliteDQNAgent {
           const optimizer = tf.train.adam(this.learningRate);
           this.qNetwork.compile({
             optimizer: optimizer,
-            loss: 'huberLoss',
+            loss: 'meanSquaredError',
             metrics: ['mse']
           });
         }

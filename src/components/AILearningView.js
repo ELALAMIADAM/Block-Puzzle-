@@ -1,51 +1,54 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { DQNAgent } from '../ai/DQNAgent';
 import { DQNEnvironment } from '../ai/DQNEnvironment';
 import { EliteDQNAgent } from '../ai/EliteDQNAgent';
-import { EliteEnvironment } from '../ai/EliteEnvironment';
+import { ConvDQNAgent } from '../ai/ConvDQNAgent';
+import { ConvDQNEnvironment } from '../ai/ConvDQNEnvironment';
 import { AlgorithmSelector } from '../ai/AdvancedAIAgents';
-import { runAITests } from '../ai/AITestRunner';
 import AIVisualization from './AIVisualization';
 import GameBoard from './GameBoard';
 import BlockTray from './BlockTray';
 import ScoreDisplay from './ScoreDisplay';
-import AdvancedAITrainingPanel from './AdvancedAITrainingPanel';
-import { generateRandomBlocks, checkGameOver } from '../utils/gameLogic';
 
 function AILearningView({ onNavigate }) {
   // Algorithm Selection
   const [selectedAlgorithm, setSelectedAlgorithm] = useState('dqn');
   
-  // Training State
+  // Training State  
   const [isTraining, setIsTraining] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [visualTraining, setVisualTraining] = useState(true);
   const [trainingSpeed, setTrainingSpeed] = useState(50);
+  const [aiPlayInterval, setAiPlayInterval] = useState(null);
   
   // Game State
   const [grid, setGrid] = useState(Array(9).fill(null).map(() => Array(9).fill(false)));
   const [availableBlocks, setAvailableBlocks] = useState([]);
   const [score, setScore] = useState(0);
   const [bestScore, setBestScore] = useState(0);
-  const [difficulty, setDifficulty] = useState('normal');
-  const [gameOver, setGameOver] = useState(false);
+  const [difficulty] = useState('normal');
   
   // Training Progress
   const [currentEpisode, setCurrentEpisode] = useState(0);
   const [episodeScore, setEpisodeScore] = useState(0);
   const [episodeSteps, setEpisodeSteps] = useState(0);
-  const [trainingStats, setTrainingStats] = useState({});
-  
+  const [trainingStats, setTrainingStats] = useState({
+    losses: [],
+    rewards: [],
+    scores: [],
+    epsilon: 1.0
+  });
+
   // AI Components
   const [agent, setAgent] = useState(null);
   const [environment, setEnvironment] = useState(null);
   
   // UI State
   const [showTips, setShowTips] = useState(false);
-  const [testResults, setTestResults] = useState({});
+  const [testResults] = useState({});
   
   // Refs for training control
   const trainingRef = useRef(false);
@@ -53,7 +56,7 @@ function AILearningView({ onNavigate }) {
   const stepRef = useRef(0);
 
   // Algorithm configurations - ALL USE SAME ENVIRONMENT FOR FAIR COMPARISON
-  const algorithmConfigs = {
+  const algorithmConfigs = useMemo(() => ({
     'dqn': {
       name: 'Original DQN',
       description: 'Deep Q-Network with experience replay',
@@ -78,6 +81,20 @@ function AILearningView({ onNavigate }) {
         epsilonDecay: 0.9995,
         gamma: 0.99,
         batchSize: 64
+      }
+    },
+    'visual-cnn': {
+      name: 'Visual CNN DQN',
+      description: 'Revolutionary CNN-based DQN with 12×12 grid and 4-channel visual intelligence',
+      agentClass: ConvDQNAgent,
+      environmentClass: ConvDQNEnvironment,
+      options: {
+        learningRate: 0.0005,
+        epsilon: 0.8,
+        epsilonDecay: 0.996,
+        gamma: 0.99,
+        batchSize: 32,
+        patternGuidedRate: 0.4
       }
     },
     'mcts': {
@@ -113,7 +130,7 @@ function AILearningView({ onNavigate }) {
         futureOpportunityWeight: 100
       }
     }
-  };
+  }), []);
 
   // Initialize agent and environment when algorithm changes
   const initializeAgent = useCallback(() => {
@@ -125,7 +142,16 @@ function AILearningView({ onNavigate }) {
     let newAgent;
     if (config.agentClass) {
       // Use specific agent class (DQN variants)
-      newAgent = new config.agentClass(env.getStateSize(), env.getMaxActionSpace(), config.options);
+      let stateSize;
+      if (selectedAlgorithm === 'visual-cnn') {
+        // ConvDQNAgent expects visual state size as array [channels, height, width]
+        stateSize = env.getVisualStateSize();
+      } else {
+        // Other agents expect state size as number
+        stateSize = env.getStateSize();
+      }
+      
+      newAgent = new config.agentClass(stateSize, env.getMaxActionSpace(), config.options);
     } else {
       // Use AlgorithmSelector for advanced algorithms
       newAgent = AlgorithmSelector.createAgent(selectedAlgorithm, env.getStateSize(), env.getMaxActionSpace(), config.options);
@@ -139,10 +165,10 @@ function AILearningView({ onNavigate }) {
     setGrid(env.grid.map(row => [...row]));
     setAvailableBlocks(env.availableBlocks.map(block => block.map(row => [...row])));
     setScore(env.score);
-    setGameOver(false);
+    setBestScore(Math.max(bestScore, env.score));
     
     console.log(`✅ ${config.name} initialized successfully!`);
-  }, [selectedAlgorithm]);
+  }, [selectedAlgorithm, algorithmConfigs, bestScore]);
 
   useEffect(() => {
     initializeAgent();
@@ -224,134 +250,6 @@ function AILearningView({ onNavigate }) {
     console.log(`🔄 ${algorithmConfigs[selectedAlgorithm].name} training reset`);
   };
 
-  const startAIPlay = async () => {
-    if (!agent || !environment) return;
-    
-    setIsPlaying(true);
-    console.log(`🎮 Starting ${algorithmConfigs[selectedAlgorithm].name} gameplay...`);
-    
-    // Reset environment to current game state
-    environment.setState(grid, availableBlocks, score, difficulty);
-    
-    while (isPlaying && !gameOver) {
-      await makeAIMove();
-      await new Promise(resolve => setTimeout(resolve, 1000)); // 1 second between moves
-    }
-    
-    setIsPlaying(false);
-  };
-
-  const stopAIPlay = () => {
-    setIsPlaying(false);
-    console.log(`⏹️ ${algorithmConfigs[selectedAlgorithm].name} gameplay stopped`);
-  };
-
-  const makeAIMove = async () => {
-    if (!agent || !environment || !isPlaying) return;
-    
-    try {
-      const validActions = environment.getValidActions();
-      
-      if (validActions.length === 0) {
-        console.log('🎮 No valid actions available, stopping AI play');
-        stopAIPlay();
-        return;
-      }
-      
-      // Get state using DQNEnvironment method
-      let state = environment.getState(); // DQNEnvironment always has getState() method
-      
-      let action;
-      
-      // Algorithm-specific action selection for gameplay
-      switch (selectedAlgorithm) {
-        case 'mcts':
-          action = await agent.selectAction(environment);
-          break;
-        case 'policy-gradient':
-          action = await agent.selectAction(state, validActions);
-          break;
-        case 'heuristic':
-          action = await agent.selectAction(environment);
-          break;
-        case 'elite-dqn':
-          action = await agent.act(state, validActions, environment);
-          break;
-        case 'dqn':
-        default:
-          action = await agent.act(state, validActions, environment);
-          break;
-      }
-      
-      if (action === null || action === undefined) {
-        console.warn(`⚠️ ${selectedAlgorithm} returned null action during play`);
-        action = validActions[Math.floor(Math.random() * validActions.length)];
-      }
-      
-      const stepResult = environment.step(action);
-      
-      // CRITICAL: Use REAL game score, not AI rewards
-      const realGameScore = environment.score;
-      
-      // Update visual state with REAL game performance
-      setGrid(environment.grid.map(row => [...row]));
-      setAvailableBlocks(environment.availableBlocks.map(block => block.map(row => [...row])));
-      setScore(realGameScore); // Use real game score
-      setBestScore(Math.max(bestScore, realGameScore)); // Use real game score
-      
-      // Check if game is over
-      if (stepResult.done || environment.gameOver) {
-        console.log(`🎮 Game Over! REAL Final Score: ${realGameScore} (Algorithm: ${selectedAlgorithm})`);
-        stopAIPlay();
-        
-        // Update agent stats with REAL game score
-        if (agent.endEpisode && typeof agent.endEpisode === 'function') {
-          switch (selectedAlgorithm) {
-            case 'policy-gradient':
-              await agent.endEpisode(realGameScore); // Use real game score
-              break;
-            case 'mcts':
-            case 'heuristic':
-              agent.endEpisode(realGameScore); // Use real game score
-              break;
-            case 'elite-dqn':
-            case 'dqn':
-            default:
-              agent.endEpisode(stepResult.reward, realGameScore, environment); // Reward for AI, real score for comparison
-              break;
-          }
-        }
-        
-        // Update training stats
-        if (agent.getStats && typeof agent.getStats === 'function') {
-          const stats = agent.getStats();
-          stats.lastGameScore = realGameScore; // Ensure real score is tracked
-          setTrainingStats(stats);
-        }
-      }
-      
-      // Add new blocks when needed - use DQNEnvironment's curriculum blocks
-      if (environment.availableBlocks.length === 0 && !stepResult.done) {
-        environment.availableBlocks = environment.generateCurriculumBlocks(); // DQNEnvironment method
-        setAvailableBlocks(environment.availableBlocks.map(block => block.map(row => [...row])));
-        
-        if (environment.checkGameOver()) {
-          console.log('🎮 No more moves possible, stopping AI play');
-          stopAIPlay();
-        }
-      }
-      
-      // Clean up state tensor
-      if (state && state.dispose && typeof state.dispose === 'function') {
-        state.dispose();
-      }
-      
-    } catch (error) {
-      console.error(`❌ AI move error for ${selectedAlgorithm}:`, error);
-      stopAIPlay();
-    }
-  };
-
   const runTrainingEpisode = async () => {
     if (!agent || !environment) return;
     
@@ -406,9 +304,8 @@ function AILearningView({ onNavigate }) {
           case 'heuristic':
             action = await agent.selectAction(environment);
             break;
+          case 'visual-cnn':
           case 'elite-dqn':
-            action = await agent.act(state, validActions, environment);
-            break;
           case 'dqn':
           default:
             action = await agent.act(state, validActions, environment);
@@ -459,6 +356,7 @@ function AILearningView({ onNavigate }) {
           case 'heuristic':
             // Heuristic doesn't need training, it's rule-based
             break;
+          case 'visual-cnn':
           case 'elite-dqn':
           case 'dqn':
           default:
@@ -480,9 +378,13 @@ function AILearningView({ onNavigate }) {
         done = stepResult.done;
         stepCount++;
         
-        // Add new blocks when needed - use DQNEnvironment's curriculum blocks
+        // Add new blocks when needed - use environment-specific block generation
         if (environment.availableBlocks.length === 0 && !done) {
-          environment.availableBlocks = environment.generateCurriculumBlocks(); // DQNEnvironment method
+          if (selectedAlgorithm === 'visual-cnn') {
+            environment.availableBlocks = environment.generateVisualBlocks(); // ConvDQNEnvironment method
+          } else {
+            environment.availableBlocks = environment.generateCurriculumBlocks(); // DQNEnvironment method
+          }
           done = environment.checkGameOver();
           
           if (visualTraining) {
@@ -512,6 +414,7 @@ function AILearningView({ onNavigate }) {
             agent.endEpisode(finalGameScore); // Use real game score
           }
           break;
+        case 'visual-cnn':
         case 'elite-dqn':
         case 'dqn':
         default:
@@ -549,77 +452,6 @@ function AILearningView({ onNavigate }) {
       
     } catch (error) {
       console.error(`❌ Training episode error for ${algorithmConfigs[selectedAlgorithm].name}:`, error);
-    }
-  };
-
-  const saveModel = async () => {
-    if (!agent) {
-      alert('No agent available to save!');
-      return;
-    }
-    
-    try {
-      const algorithmName = algorithmConfigs[selectedAlgorithm].name;
-      const modelName = `${selectedAlgorithm}-model-${Date.now()}`;
-      
-      console.log(`💾 Saving ${algorithmName} model...`);
-      
-      let success = false;
-      
-      switch (selectedAlgorithm) {
-        case 'mcts':
-        case 'heuristic':
-          // For non-neural algorithms, save stats and configuration
-          const agentData = {
-            algorithm: selectedAlgorithm,
-            stats: agent.getStats(),
-            timestamp: new Date().toISOString(),
-            version: '1.0'
-          };
-          
-          localStorage.setItem(modelName, JSON.stringify(agentData));
-          success = true;
-          console.log(`✅ ${algorithmName} configuration saved to localStorage`);
-          break;
-          
-        case 'policy-gradient':
-          // Save policy gradient model if it has neural networks
-          if (agent.saveModel && typeof agent.saveModel === 'function') {
-            success = await agent.saveModel(modelName);
-          } else {
-            // Fallback to stats saving
-            const pgData = {
-              algorithm: selectedAlgorithm,
-              stats: agent.getStats(),
-              timestamp: new Date().toISOString(),
-              version: '1.0'
-            };
-            localStorage.setItem(modelName, JSON.stringify(pgData));
-            success = true;
-          }
-          break;
-          
-        case 'elite-dqn':
-        case 'dqn':
-        default:
-          // Save neural network models
-          if (agent.saveModel && typeof agent.saveModel === 'function') {
-            success = await agent.saveModel(modelName);
-          } else {
-            throw new Error('Agent does not support model saving');
-          }
-          break;
-      }
-      
-      if (success) {
-        alert(`✅ ${algorithmName} model saved successfully!\n\nModel: ${modelName}\nAlgorithm: ${algorithmName}\nBest Score: ${agent.getStats().bestScore || 0}`);
-      } else {
-        throw new Error('Model saving failed');
-      }
-      
-    } catch (error) {
-      console.error('❌ Model save error:', error);
-      alert(`❌ Failed to save ${algorithmConfigs[selectedAlgorithm].name} model: ${error.message}`);
     }
   };
 
@@ -665,13 +497,13 @@ function AILearningView({ onNavigate }) {
           // Load policy gradient model
           if (agent.loadModel && typeof agent.loadModel === 'function') {
             // Try to find a saved model
-            const pgKeys = Object.keys(localStorage).filter(key => 
-              key.includes('policy_gradient') && key.includes('model')
+            const modelKeys = Object.keys(localStorage).filter(key => 
+              key.includes('policy-gradient') && key.includes('model')
             );
             
-            if (pgKeys.length > 0) {
-              const latestPgKey = pgKeys.sort().pop();
-              success = await agent.loadModel(latestPgKey);
+            if (modelKeys.length > 0) {
+              const latestModelKey = modelKeys.sort().pop();
+              success = await agent.loadModel(latestModelKey);
             } else {
               throw new Error('No saved Policy Gradient models found');
             }
@@ -680,6 +512,7 @@ function AILearningView({ onNavigate }) {
           }
           break;
           
+        case 'visual-cnn':
         case 'elite-dqn':
         case 'dqn':
         default:
@@ -718,52 +551,6 @@ function AILearningView({ onNavigate }) {
     } catch (error) {
       console.error('❌ Model load error:', error);
       alert(`❌ Failed to load ${algorithmConfigs[selectedAlgorithm].name} model: ${error.message}`);
-    }
-  };
-
-  const runTests = async () => {
-    console.log('🧪 Running comprehensive AI algorithm tests...');
-    
-    if (!agent || !environment) {
-      alert('No trained agent available to test!');
-      return;
-    }
-    
-    try {
-      // Run the proper algorithm test
-      const testResults = await testAlgorithm();
-      
-      // Also run the system integration tests
-      const systemResults = await runAITests();
-      const allSystemTestsPassed = Object.values(systemResults).every(result => result);
-      
-      const combinedMessage = `🧪 COMPREHENSIVE TEST RESULTS:
-
-🎯 ALGORITHM PERFORMANCE TEST:
-${testResults.algorithmName}
-• Average Score: ${testResults.averageScore.toFixed(1)}
-• Best Score: ${testResults.bestScore}
-• Games Completed: ${testResults.gamesCompleted}/10
-
-🔧 SYSTEM INTEGRATION TESTS:
-${allSystemTestsPassed ? '✅ All system tests passed!' : '❌ Some system tests failed - check console'}
-
-📊 OVERALL ASSESSMENT:
-${testResults.averageScore >= 200 && allSystemTestsPassed ? 
-  '🏆 EXCELLENT - Algorithm is well-trained and system is stable' :
-  testResults.averageScore >= 100 && allSystemTestsPassed ?
-  '🥈 GOOD - Algorithm shows promise, system is stable' :
-  allSystemTestsPassed ?
-  '📈 FAIR - System works but algorithm needs more training' :
-  '⚠️ ISSUES DETECTED - Check console for details'
-}`;
-
-      console.log(combinedMessage);
-      alert(combinedMessage);
-      
-    } catch (error) {
-      console.error('❌ Test execution failed:', error);
-      alert(`❌ Test execution failed: ${error.message}`);
     }
   };
 
@@ -859,6 +646,7 @@ ${testResults.averageScore >= 200 && allSystemTestsPassed ?
           }
           break;
           
+        case 'visual-cnn':
         case 'elite-dqn':
         case 'dqn':
         default:
@@ -911,151 +699,6 @@ ${testResults.averageScore >= 200 && allSystemTestsPassed ?
     }
   };
 
-  // NEW: Proper testing function for fair algorithm comparison
-  const testAlgorithm = async () => {
-    if (!agent || !environment) {
-      alert('No trained agent available to test!');
-      return;
-    }
-
-    console.log(`🧪 Testing ${algorithmConfigs[selectedAlgorithm].name}...`);
-    
-    const testResults = {
-      algorithm: selectedAlgorithm,
-      algorithmName: algorithmConfigs[selectedAlgorithm].name,
-      scores: [],
-      averageScore: 0,
-      bestScore: 0,
-      worstScore: Infinity,
-      gamesCompleted: 0,
-      totalMoves: 0
-    };
-
-    const numTestGames = 10; // Test with 10 games for fair comparison
-    
-    for (let gameNum = 0; gameNum < numTestGames; gameNum++) {
-      console.log(`🎯 Test Game ${gameNum + 1}/${numTestGames} for ${algorithmConfigs[selectedAlgorithm].name}`);
-      
-      // Reset environment for each test game
-      environment.reset();
-      
-      let gameScore = 0;
-      let moves = 0;
-      let done = false;
-      const maxMoves = 100; // Prevent infinite games
-      
-      // Get initial state
-      let state = environment.getState(); // DQNEnvironment always has getState() method
-      
-      while (!done && moves < maxMoves) {
-        const validActions = environment.getValidActions();
-        
-        if (validActions.length === 0) {
-          done = true;
-          break;
-        }
-        
-        let action;
-        
-        // Use trained agent to select action (NO EXPLORATION - pure exploitation)
-        try {
-          switch (selectedAlgorithm) {
-            case 'mcts':
-              action = await agent.selectAction(environment);
-              break;
-            case 'policy-gradient':
-              action = await agent.selectAction(state, validActions);
-              break;
-            case 'heuristic':
-              action = await agent.selectAction(environment);
-              break;
-            case 'elite-dqn':
-              // Force exploitation mode for testing
-              const oldEpsilon = agent.epsilon;
-              agent.epsilon = 0; // No exploration during testing
-              action = await agent.act(state, validActions, environment);
-              agent.epsilon = oldEpsilon; // Restore original epsilon
-              break;
-            case 'dqn':
-            default:
-              // Force exploitation mode for testing
-              const oldEps = agent.epsilon;
-              agent.epsilon = 0; // No exploration during testing
-              action = await agent.act(state, validActions, environment);
-              agent.epsilon = oldEps; // Restore original epsilon
-              break;
-          }
-        } catch (error) {
-          console.warn(`⚠️ Error during testing, using random action:`, error);
-          action = validActions[Math.floor(Math.random() * validActions.length)];
-        }
-        
-        if (action === null || action === undefined) {
-          action = validActions[Math.floor(Math.random() * validActions.length)];
-        }
-        
-        const stepResult = environment.step(action);
-        gameScore = environment.score; // Use REAL game score
-        state = stepResult.state;
-        done = stepResult.done;
-        moves++;
-        
-        // Add new blocks when needed - use DQNEnvironment's curriculum blocks
-        if (environment.availableBlocks.length === 0 && !done) {
-          environment.availableBlocks = environment.generateCurriculumBlocks(); // DQNEnvironment method
-          done = environment.checkGameOver();
-        }
-        
-        // Clean up state tensor
-        if (state && state.dispose && typeof state.dispose === 'function') {
-          state.dispose();
-        }
-      }
-      
-      // Record REAL game results
-      testResults.scores.push(gameScore);
-      testResults.totalMoves += moves;
-      testResults.gamesCompleted++;
-      testResults.bestScore = Math.max(testResults.bestScore, gameScore);
-      testResults.worstScore = Math.min(testResults.worstScore, gameScore);
-      
-      console.log(`✅ Test Game ${gameNum + 1} completed: Score=${gameScore}, Moves=${moves}`);
-    }
-    
-    // Calculate final statistics
-    testResults.averageScore = testResults.scores.reduce((a, b) => a + b, 0) / testResults.scores.length;
-    testResults.averageMoves = testResults.totalMoves / testResults.gamesCompleted;
-    
-    // Display results
-    const resultMessage = `🧪 TEST RESULTS for ${testResults.algorithmName}:
-
-📊 Performance Summary:
-• Games Played: ${testResults.gamesCompleted}
-• Average Score: ${testResults.averageScore.toFixed(1)}
-• Best Score: ${testResults.bestScore}
-• Worst Score: ${testResults.worstScore}
-• Average Moves: ${testResults.averageMoves.toFixed(1)}
-
-📈 Score Distribution:
-${testResults.scores.map((score, i) => `Game ${i + 1}: ${score}`).join('\n')}
-
-🎯 Performance Rating:
-${testResults.averageScore >= 500 ? '🏆 Excellent' : 
-  testResults.averageScore >= 200 ? '🥈 Good' : 
-  testResults.averageScore >= 100 ? '🥉 Fair' : '📈 Needs Training'}`;
-
-    console.log(resultMessage);
-    alert(resultMessage);
-    
-    // Store test results for comparison
-    setTestResults(prev => ({
-      ...prev,
-      [selectedAlgorithm]: testResults
-    }));
-    
-    return testResults;
-  };
-
   const TipsModal = () => (
     <div className="tips-modal-overlay" onClick={() => setShowTips(false)}>
       <div className="tips-modal" onClick={(e) => e.stopPropagation()}>
@@ -1076,18 +719,18 @@ ${testResults.averageScore >= 500 ? '🏆 Excellent' :
           <div className="tip-section">
             <h4>🎮 Training Controls</h4>
             <ul>
+              <li><strong>Start Training:</strong> Begin AI learning process</li>
               <li><strong>Pause/Resume:</strong> Temporarily halt training and continue later</li>
               <li><strong>Stop:</strong> End training session completely</li>
-              <li><strong>Reset:</strong> Clear AI memory and start fresh training</li>
-              <li><strong>Speed Control:</strong> Adjust how fast the AI plays during training</li>
+              <li><strong>Reset All Stats:</strong> Clear all progress and start fresh training</li>
+              <li><strong>Speed Control:</strong> Adjust how fast the AI trains during learning</li>
             </ul>
           </div>
           
           <div className="tip-section">
-            <h4>🧪 Testing & Models</h4>
+            <h4>💾 Model Management</h4>
             <ul>
-              <li><strong>Test Model:</strong> See how well your trained AI performs</li>
-              <li><strong>Download Model:</strong> Save your trained AI for later use</li>
+              <li><strong>Download Model:</strong> Save your trained AI to your computer</li>
               <li><strong>Load Model:</strong> Restore a previously saved AI model</li>
             </ul>
           </div>
@@ -1171,22 +814,6 @@ ${testResults.averageScore >= 500 ? '🏆 Excellent' :
                 </option>
               ))}
             </select>
-            
-            <button
-              onClick={runTests}
-              disabled={isTraining || isPlaying}
-              style={{
-                padding: '12px 20px',
-                borderRadius: '8px',
-                border: 'none',
-                background: 'linear-gradient(145deg, #28a745, #20c997)',
-                color: 'white',
-                fontWeight: 'bold',
-                cursor: 'pointer'
-              }}
-            >
-              🧪 Run Tests
-            </button>
           </div>
           
           <div style={{
@@ -1316,7 +943,7 @@ ${testResults.averageScore >= 500 ? '🏆 Excellent' :
         {/* Training Controls */}
         <div className="training-controls" style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+          gridTemplateColumns: '1fr 1fr 1fr',
           gap: '15px',
           marginBottom: '20px'
         }}>
@@ -1399,67 +1026,9 @@ ${testResults.averageScore >= 500 ? '🏆 Excellent' :
 
           <div className="control-group">
             <label style={{ color: '#FFD700', fontWeight: 'bold', marginBottom: '8px', display: 'block' }}>
-              AI Gameplay
-            </label>
-            <div style={{ display: 'flex', gap: '10px' }}>
-              {!isPlaying ? (
-                <button
-                  onClick={startAIPlay}
-                  disabled={isTraining || !agent}
-                  className="btn info"
-                  style={{
-                    flex: 1,
-                    padding: '12px',
-                    borderRadius: '8px',
-                    border: 'none',
-                    background: 'linear-gradient(145deg, #17a2b8, #138496)',
-                    color: 'white',
-                    fontWeight: 'bold'
-                  }}
-                >
-                  🎮 Start AI Play
-                </button>
-              ) : (
-                <button
-                  onClick={stopAIPlay}
-                  className="btn danger"
-                  style={{
-                    flex: 1,
-                    padding: '12px',
-                    borderRadius: '8px',
-                    border: 'none',
-                    background: 'linear-gradient(145deg, #dc3545, #c82333)',
-                    color: 'white',
-                    fontWeight: 'bold'
-                  }}
-                >
-                  ⏹️ Stop AI Play
-                </button>
-              )}
-            </div>
-          </div>
-
-          <div className="control-group">
-            <label style={{ color: '#FFD700', fontWeight: 'bold', marginBottom: '8px', display: 'block' }}>
               Model Management
             </label>
-            <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
-              <button
-                onClick={saveModel}
-                disabled={!agent || isTraining || isPlaying}
-                className="btn save"
-                style={{
-                  flex: 1,
-                  padding: '12px',
-                  borderRadius: '8px',
-                  border: 'none',
-                  background: 'linear-gradient(145deg, #6f42c1, #5a32a3)',
-                  color: 'white',
-                  fontWeight: 'bold'
-                }}
-              >
-                💾 Save
-              </button>
+            <div style={{ display: 'flex', gap: '10px' }}>
               <button
                 onClick={loadModel}
                 disabled={!agent || isTraining || isPlaying}
@@ -1474,10 +1043,8 @@ ${testResults.averageScore >= 500 ? '🏆 Excellent' :
                   fontWeight: 'bold'
                 }}
               >
-                📁 Load
+                📁 Load Model
               </button>
-            </div>
-            <div style={{ display: 'flex', gap: '10px' }}>
               <button
                 onClick={downloadModel}
                 disabled={!agent || isTraining || isPlaying}
@@ -1492,70 +1059,107 @@ ${testResults.averageScore >= 500 ? '🏆 Excellent' :
                   fontWeight: 'bold'
                 }}
               >
-                🔽 Download
-              </button>
-              <button
-                onClick={runTests}
-                disabled={isTraining || isPlaying}
-                className="btn test"
-                style={{
-                  flex: 1,
-                  padding: '12px',
-                  borderRadius: '8px',
-                  border: 'none',
-                  background: 'linear-gradient(145deg, #28a745, #1e7e34)',
-                  color: 'white',
-                  fontWeight: 'bold'
-                }}
-              >
-                🧪 Test
+                🔽 Download Model
               </button>
             </div>
           </div>
 
           <div className="control-group">
             <label style={{ color: '#FFD700', fontWeight: 'bold', marginBottom: '8px', display: 'block' }}>
-              Performance Testing
+              Reset Training
             </label>
-            <div style={{ display: 'flex', gap: '10px' }}>
-              <button
-                onClick={testAlgorithm}
-                disabled={!agent || isTraining || isPlaying}
-                className="btn test-performance"
-                style={{
-                  flex: 1,
-                  padding: '12px',
-                  borderRadius: '8px',
-                  border: 'none',
-                  background: 'linear-gradient(145deg, #e74c3c, #c0392b)',
-                  color: 'white',
-                  fontWeight: 'bold'
-                }}
-              >
-                🎯 Test Performance
-              </button>
-            </div>
-            <div style={{ fontSize: '12px', color: '#D2B48C', marginTop: '5px' }}>
-              Run 10 games to measure real performance
-            </div>
-          </div>
-
-          <div className="control-group">
-            <label style={{ color: '#FFD700', fontWeight: 'bold', marginBottom: '8px', display: 'block' }}>
-              Training Speed: {trainingSpeed}%
-            </label>
-            <input
-              type="range"
-              min="10"
-              max="100"
-              value={trainingSpeed}
-              onChange={(e) => setTrainingSpeed(parseInt(e.target.value))}
-              disabled={isTraining}
+            <button
+              onClick={resetTraining}
+              disabled={isTraining || isPlaying}
+              className="btn reset"
               style={{
                 width: '100%',
-                accentColor: '#FFD700'
+                padding: '12px',
+                borderRadius: '8px',
+                border: 'none',
+                background: 'linear-gradient(145deg, #6c757d, #5a6268)',
+                color: 'white',
+                fontWeight: 'bold'
               }}
-            />
+            >
+              🔄 Reset All Stats
+            </button>
+            <div style={{ fontSize: '12px', color: '#D2B48C', marginTop: '5px', textAlign: 'center' }}>
+              Clear all progress and start fresh
+            </div>
+          </div>
+        </div>
+
+        {/* Training Speed Control - Full Width */}
+        <div className="speed-control" style={{
+          background: 'rgba(139, 69, 19, 0.3)',
+          padding: '20px',
+          borderRadius: '12px',
+          border: '2px solid #8B4513',
+          marginBottom: '20px'
+        }}>
+          <div style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: '20px',
+            maxWidth: '600px',
+            margin: '0 auto'
+          }}>
+            <label style={{ 
+              color: '#FFD700', 
+              fontWeight: 'bold', 
+              minWidth: '140px',
+              fontSize: '16px'
+            }}>
+              ⚡ Training Speed:
+            </label>
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '15px' }}>
+              <span style={{ color: '#D2B48C', fontSize: '14px', minWidth: '30px' }}>
+                10%
+              </span>
+              <input
+                type="range"
+                min="10"
+                max="100"
+                value={trainingSpeed}
+                onChange={(e) => setTrainingSpeed(parseInt(e.target.value))}
+                disabled={isTraining}
+                style={{
+                  flex: 1,
+                  height: '8px',
+                  borderRadius: '4px',
+                  background: 'rgba(139, 69, 19, 0.5)',
+                  outline: 'none',
+                  accentColor: '#FFD700',
+                  cursor: isTraining ? 'not-allowed' : 'pointer'
+                }}
+              />
+              <span style={{ color: '#D2B48C', fontSize: '14px', minWidth: '40px' }}>
+                100%
+              </span>
+              <div style={{ 
+                background: 'rgba(255, 215, 0, 0.2)', 
+                padding: '6px 12px', 
+                borderRadius: '6px',
+                border: '1px solid #FFD700',
+                minWidth: '60px',
+                textAlign: 'center'
+              }}>
+                <span style={{ color: '#FFD700', fontWeight: 'bold', fontSize: '16px' }}>
+                  {trainingSpeed}%
+                </span>
+              </div>
+            </div>
+          </div>
+          <div style={{ 
+            fontSize: '12px', 
+            color: '#D2B48C', 
+            marginTop: '10px', 
+            textAlign: 'center',
+            maxWidth: '600px',
+            margin: '10px auto 0'
+          }}>
+            Adjust how fast the AI trains (higher = faster training, lower = more detailed learning)
           </div>
         </div>
 
@@ -1575,21 +1179,6 @@ ${testResults.averageScore >= 500 ? '🏆 Excellent' :
               marginBottom: '10px'
             }}>
               <h4 style={{ color: '#FFD700', margin: 0 }}>Training Progress</h4>
-              <button
-                onClick={resetTraining}
-                disabled={isTraining || isPlaying}
-                style={{
-                  padding: '8px 12px',
-                  borderRadius: '6px',
-                  border: 'none',
-                  background: 'linear-gradient(145deg, #6c757d, #5a6268)',
-                  color: 'white',
-                  fontWeight: 'bold',
-                  fontSize: '12px'
-                }}
-              >
-                🔄 Reset
-              </button>
             </div>
             
             <div className="progress-bar" style={{
@@ -1733,7 +1322,11 @@ ${testResults.averageScore >= 500 ? '🏆 Excellent' :
                     <span style={{ color: '#FFD700', fontWeight: 'bold' }}>{currentEpisode}</span>
                   </div>
                   <div className="info-item" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
-                    <span style={{ color: '#D2B48C' }}>Score:</span>
+                    <span style={{ color: '#D2B48C' }}>Episode Score:</span>
+                    <span style={{ color: '#FFD700', fontWeight: 'bold' }}>{episodeScore}</span>
+                  </div>
+                  <div className="info-item" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
+                    <span style={{ color: '#D2B48C' }}>Total Score:</span>
                     <span style={{ color: '#FFD700', fontWeight: 'bold' }}>{score}</span>
                   </div>
                   <div className="info-item" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>

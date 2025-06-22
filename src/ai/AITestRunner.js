@@ -89,7 +89,7 @@ export async function runAITests() {
     try {
       const pgEnv = new EliteEnvironment();
       pgEnv.reset();
-      const pgAgent = AlgorithmSelector.createAgent('policy_gradient', pgEnv.getStateSize(), pgEnv.getMaxActionSpace(), {
+      const pgAgent = AlgorithmSelector.createAgent('policy-gradient', pgEnv.getStateSize(), pgEnv.getMaxActionSpace(), {
         learningRate: 0.001,
         gamma: 0.99
       });
@@ -319,7 +319,7 @@ export function getAlgorithmCapabilities() {
       supportsVisualization: true,
       supportsStats: true
     },
-    'policy_gradient': {
+    'policy-gradient': {
       name: 'Policy Gradient',
       features: ['Direct Policy Optimization', 'Action Masking', 'Entropy Regularization'],
       supportsTraining: true,

@@ -1,4 +1,7 @@
 import * as tf from '@tensorflow/tfjs';
+import { ConvDQNAgent } from './ConvDQNAgent';
+import { DQNAgent } from './DQNAgent';
+import { EliteDQNAgent } from './EliteDQNAgent';
 
 /**
  * ADVANCED AI AGENTS - Enhanced algorithms for wood block puzzle
@@ -225,20 +228,17 @@ export class MCTSAgent {
 
   selectHeuristicAction(validActions, environment) {
     let bestAction = validActions[0];
-    let bestScore = -Infinity;
+    let bestScore = 0;
     
-    // Limit evaluation to prevent computation overload
-    const actionsToEvaluate = Math.min(5, validActions.length);
-    
-    for (let i = 0; i < actionsToEvaluate; i++) {
+    for (let i = 0; i < Math.min(validActions.length, 5); i++) {
       const action = validActions[i];
       
       // Simple heuristic: prefer actions that might complete lines
       let score = Math.random() * 10; // Base random score
       
       // Decode action to get placement info
-      const { blockIndex, row, col } = environment.decodeAction ? 
-        environment.decodeAction(action) : { blockIndex: 0, row: 0, col: 0 };
+      const { blockIndex, row } = environment.decodeAction ? 
+        environment.decodeAction(action) : { blockIndex: 0, row: 0 };
       
       // Simple line completion check
       if (blockIndex < environment.availableBlocks.length) {
@@ -642,6 +642,11 @@ export class PolicyGradientAgent {
   }
 
   async endEpisode(finalScore) {
+    // IMPORTANT: Train the policy gradient at the end of each episode
+    if (this.episodeRewards.length > 0 && this.episodeStates.length > 0) {
+      await this.train();
+    }
+    
     this.episode++;
     
     // CRITICAL: Track REAL game score for fair comparison
@@ -650,7 +655,7 @@ export class PolicyGradientAgent {
     // Update best score with REAL game score
     if (finalScore > this.bestScore) {
       this.bestScore = finalScore;
-      console.log(`🌳 MCTS NEW BEST REAL SCORE: ${this.bestScore} (Episode ${this.episode})`);
+      console.log(`📈 Policy Gradient NEW BEST REAL SCORE: ${this.bestScore} (Episode ${this.episode})`);
     }
     
     // Calculate average REAL game score
@@ -663,7 +668,7 @@ export class PolicyGradientAgent {
       episode: this.episode,
       score: finalScore, // REAL game score
       avgDecisionTime: this.totalDecisionTime / Math.max(this.totalDecisions, 1),
-      avgSimulations: this.totalSimulations / Math.max(this.totalDecisions, 1),
+      episodeLength: this.episodeRewards.length,
       timestamp: Date.now()
     });
     
@@ -672,12 +677,11 @@ export class PolicyGradientAgent {
       this.performanceHistory = this.performanceHistory.slice(-50);
     }
     
-    console.log(`📈 Policy Gradient Episode ${this.episode}: REAL_Score=${finalScore}, Best_Real=${this.bestScore}, Avg_Real=${this.avgScore.toFixed(1)}, Decisions=${this.totalDecisions}, AvgTime=${(this.totalDecisionTime / Math.max(this.totalDecisions, 1)).toFixed(1)}ms`);
+    console.log(`📈 Policy Gradient Episode ${this.episode}: REAL_Score=${finalScore}, Best_Real=${this.bestScore}, Avg_Real=${this.avgScore.toFixed(1)}, Steps=${this.episodeRewards.length}, Training_Steps=${this.episodeRewards.length > 0 ? 'Yes' : 'No'}`);
     
     // Reset episode counters
     this.totalDecisions = 0;
     this.totalDecisionTime = 0;
-    this.totalSimulations = 0;
   }
 
   getStats() {
@@ -707,7 +711,7 @@ export class PolicyGradientAgent {
         supportsTraining: true,
         supportsVisualization: true,
         requiresExploration: false,
-        algorithmType: 'policy_gradient'
+        algorithmType: 'policy-gradient'
       }
     };
   }
@@ -1104,15 +1108,18 @@ export class HybridHeuristicAgent {
  */
 export class AlgorithmSelector {
   static createAgent(algorithm, stateSize, actionSize, options = {}) {
-    switch (algorithm.toLowerCase()) {
+    switch (algorithm) {
+      case 'dqn':
+        return new DQNAgent(stateSize, actionSize, options);
+      case 'elite-dqn':
+        return new EliteDQNAgent(stateSize, actionSize, options);
+      case 'visual-cnn':
+        return new ConvDQNAgent(stateSize, actionSize, options);
       case 'mcts':
         return new MCTSAgent(stateSize, actionSize, options);
-      case 'policy_gradient':
       case 'policy-gradient':
-      case 'reinforce':
         return new PolicyGradientAgent(stateSize, actionSize, options);
       case 'heuristic':
-      case 'hybrid':
         return new HybridHeuristicAgent(stateSize, actionSize, options);
       default:
         throw new Error(`Unknown algorithm: ${algorithm}`);
@@ -1121,33 +1128,12 @@ export class AlgorithmSelector {
 
   static getAvailableAlgorithms() {
     return [
-      {
-        name: 'mcts',
-        displayName: 'Monte Carlo Tree Search',
-        description: 'Tree search with rollouts - excellent for sparse rewards',
-        strengths: ['Handles sparse rewards', 'No training required', 'Robust decisions'],
-        weaknesses: ['Computationally intensive', 'Slower per move'],
-        supportsTraining: false,
-        supportsVisualization: true
-      },
-      {
-        name: 'policy_gradient',
-        displayName: 'Policy Gradient (REINFORCE)',
-        description: 'Direct policy optimization - learns action preferences',
-        strengths: ['Direct policy learning', 'Good for large action spaces', 'Stable training'],
-        weaknesses: ['Requires training', 'High variance'],
-        supportsTraining: true,
-        supportsVisualization: true
-      },
-      {
-        name: 'heuristic',
-        displayName: 'Hybrid Heuristic',
-        description: 'Hand-crafted rules with lookahead - fast and effective',
-        strengths: ['Very fast', 'No training needed', 'Interpretable decisions'],
-        weaknesses: ['Limited by human knowledge', 'May miss complex patterns'],
-        supportsTraining: false,
-        supportsVisualization: true
-      }
+      'dqn',
+      'elite-dqn', 
+      'visual-cnn',
+      'mcts',
+      'policy-gradient',
+      'heuristic'
     ];
   }
 } 
