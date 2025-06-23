@@ -33,6 +33,7 @@ function AILearningView({ onNavigate }) {
   
   // Training Progress
   const [currentEpisode, setCurrentEpisode] = useState(0);
+  const [maxEpisodes, setMaxEpisodes] = useState(500);
   const [episodeScore, setEpisodeScore] = useState(0);
   const [episodeSteps, setEpisodeSteps] = useState(0);
   const [trainingStats, setTrainingStats] = useState({
@@ -85,7 +86,7 @@ function AILearningView({ onNavigate }) {
     },
     'visual-cnn': {
       name: 'Visual CNN DQN',
-      description: 'Revolutionary CNN-based DQN with 12×12 grid and 4-channel visual intelligence',
+      description: 'Revolutionary CNN-based DQN with 15×15 grid and 4-channel visual intelligence',
       agentClass: ConvDQNAgent,
       environmentClass: ConvDQNEnvironment,
       options: {
@@ -201,7 +202,7 @@ function AILearningView({ onNavigate }) {
       await new Promise(resolve => setTimeout(resolve, 50));
       
       // Check if we've reached the episode limit
-      if (episodeRef.current >= 500) {
+      if (episodeRef.current >= maxEpisodes) {
         break;
       }
     }
@@ -1154,12 +1155,76 @@ function AILearningView({ onNavigate }) {
           <div style={{ 
             fontSize: '12px', 
             color: '#D2B48C', 
-            marginTop: '10px', 
-            textAlign: 'center',
-            maxWidth: '600px',
-            margin: '10px auto 0'
+            textAlign: 'center', 
+            marginTop: '10px' 
           }}>
-            Adjust how fast the AI trains (higher = faster training, lower = more detailed learning)
+            Higher speed = faster training but potentially less stable learning
+          </div>
+        </div>
+
+        {/* Episode Count Control */}
+        <div className="episode-control" style={{
+          background: 'rgba(139, 69, 19, 0.3)',
+          padding: '20px',
+          borderRadius: '12px',
+          border: '2px solid #8B4513',
+          marginBottom: '20px'
+        }}>
+          <div style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: '20px',
+            maxWidth: '600px',
+            margin: '0 auto'
+          }}>
+            <label style={{ 
+              color: '#FFD700', 
+              fontWeight: 'bold', 
+              minWidth: '140px',
+              fontSize: '16px'
+            }}>
+              🎯 Max Episodes:
+            </label>
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '15px' }}>
+              <input
+                type="number"
+                min="50"
+                max="5000"
+                step="50"
+                value={maxEpisodes}
+                onChange={(e) => setMaxEpisodes(parseInt(e.target.value))}
+                disabled={isTraining}
+                style={{
+                  flex: 1,
+                  padding: '8px 12px',
+                  borderRadius: '6px',
+                  border: '1px solid #8B4513',
+                  background: 'rgba(255, 255, 255, 0.9)',
+                  fontSize: '16px',
+                  textAlign: 'center'
+                }}
+              />
+              <div style={{ 
+                background: 'rgba(255, 215, 0, 0.2)', 
+                padding: '6px 12px', 
+                borderRadius: '6px',
+                border: '1px solid #FFD700',
+                minWidth: '120px',
+                textAlign: 'center'
+              }}>
+                <span style={{ color: '#FFD700', fontWeight: 'bold', fontSize: '14px' }}>
+                  {currentEpisode}/{maxEpisodes}
+                </span>
+              </div>
+            </div>
+          </div>
+          <div style={{ 
+            fontSize: '12px', 
+            color: '#D2B48C', 
+            textAlign: 'center', 
+            marginTop: '10px' 
+          }}>
+            Total episodes to train - more episodes usually mean better performance
           </div>
         </div>
 
@@ -1192,7 +1257,7 @@ function AILearningView({ onNavigate }) {
               <div 
                 className="progress-fill"
                 style={{ 
-                  width: `${(currentEpisode / 500) * 100}%`,
+                  width: `${(currentEpisode / maxEpisodes) * 100}%`,
                   height: '100%',
                   background: 'linear-gradient(90deg, #FFD700, #FFA500)',
                   transition: 'width 0.3s ease'
@@ -1200,7 +1265,7 @@ function AILearningView({ onNavigate }) {
               />
             </div>
             <div className="progress-text" style={{ color: '#D2B48C', fontSize: '14px', textAlign: 'center' }}>
-              Episode {currentEpisode} / 500 ({((currentEpisode / 500) * 100).toFixed(1)}%)
+              Episode {currentEpisode} / {maxEpisodes} ({((currentEpisode / maxEpisodes) * 100).toFixed(1)}%)
             </div>
           </div>
         )}
@@ -1302,10 +1367,21 @@ function AILearningView({ onNavigate }) {
                 background: 'rgba(139, 69, 19, 0.3)',
                 padding: '15px',
                 borderRadius: '8px',
-                border: '1px solid #8B4513'
+                border: '1px solid #8B4513',
+                height: '380px', // Increased height to eliminate scrollbar
+                display: 'flex',
+                flexDirection: 'column'
               }}>
-                <h5 style={{ color: '#FFD700', marginBottom: '10px' }}>Available Blocks</h5>
-                <BlockTray blocks={availableBlocks} disabled={true} />
+                <h5 style={{ color: '#FFD700', marginBottom: '10px', margin: '0 0 10px 0' }}>Available Blocks</h5>
+                <div style={{ 
+                  flex: 1,
+                  overflow: 'hidden', // Prevent content overflow
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}>
+                  <BlockTray blocks={availableBlocks} disabled={true} />
+                </div>
               </div>
 
               {/* Episode Info */}

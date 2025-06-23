@@ -1,7 +1,7 @@
 import * as tf from '@tensorflow/tfjs';
 
 // VISUAL CNN CONFIGURATION - Optimized for CNN Learning
-const GRID_SIZE = 12; // Larger grid for CNN spatial learning
+const GRID_SIZE = 45; // Large 45x45 grid for enhanced CNN spatial learning
 const MAX_BLOCKS = 3;
 const CHANNELS = 4; // Multi-channel visual representation
 
@@ -9,12 +9,12 @@ const CHANNELS = 4; // Multi-channel visual representation
  * VISUAL CNN-DQN ENVIRONMENT - ADVANCED SPATIAL PATTERN RECOGNITION
  * 
  * Revolutionary Features:
- * - 12x12 grid for enhanced CNN spatial learning
+ * - 45x45 grid for massive CNN spatial learning capacity
  * - 4-channel visual representation (grid, blocks, potentials, strategy)
- * - Advanced block shapes designed for larger space
+ * - Advanced block shapes designed for large space utilization
  * - Visual pattern recognition rewards
  * - Spatial relationship modeling
- * - Complex strategic depth with larger playing field
+ * - Complex strategic depth with extensive playing field
  */
 export class ConvDQNEnvironment {
   constructor() {
@@ -55,14 +55,14 @@ export class ConvDQNEnvironment {
       advancementThreshold: 3           // Require 3 pattern completions to advance
     };
     
-    console.log('🎨 VISUAL CNN ENVIRONMENT INITIALIZED - 12x12 PATTERN RECOGNITION MODE');
+    console.log('🎨 VISUAL CNN ENVIRONMENT INITIALIZED - 45x45 PATTERN RECOGNITION MODE');
     console.log(`📐 Grid Size: ${GRID_SIZE}x${GRID_SIZE} (${GRID_SIZE * GRID_SIZE} cells)`);
     console.log(`🖼️  Visual Channels: ${CHANNELS} (grid, blocks, potentials, strategy)`);
     console.log(`🧩 Max Blocks: ${MAX_BLOCKS} with size up to ${GRID_SIZE}x${GRID_SIZE}`);
   }
 
   reset() {
-    // 12x12 grid for better CNN spatial learning
+    // 45x45 grid for better CNN spatial learning
     this.grid = Array(GRID_SIZE).fill(null).map(() => Array(GRID_SIZE).fill(false));
     this.availableBlocks = this.generateCurriculumBlocks();
     this.score = 0;
@@ -626,7 +626,7 @@ export class ConvDQNEnvironment {
 
   // Compatibility methods
   setState(grid, availableBlocks, score, difficulty = 'visual') {
-    // Adapt to 12x12 grid
+    // Adapt to 45x45 grid
     this.grid = Array(GRID_SIZE).fill(null).map((_, row) => 
       Array(GRID_SIZE).fill(null).map((_, col) => {
         if (row < grid.length && col < grid[0].length) {

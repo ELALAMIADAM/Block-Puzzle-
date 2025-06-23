@@ -31,6 +31,7 @@ function AIVisualization({ trainingStats, isTraining, compact = false, showOnlyN
 
   const drawScoreChart = useCallback(() => {
     if (!trainingStats.scores || trainingStats.scores.length === 0) return;
+    if (!scoreChartRef.current) return;
     
     const canvas = document.createElement('canvas');
     canvas.width = compact ? 300 : 400;
@@ -143,6 +144,7 @@ function AIVisualization({ trainingStats, isTraining, compact = false, showOnlyN
 
   const drawRewardChart = useCallback(() => {
     if (!trainingStats.rewards || trainingStats.rewards.length === 0) return;
+    if (!rewardChartRef.current) return;
     
     const canvas = document.createElement('canvas');
     canvas.width = compact ? 300 : 400;
@@ -255,6 +257,7 @@ function AIVisualization({ trainingStats, isTraining, compact = false, showOnlyN
 
   const drawLossChart = useCallback(() => {
     if (!trainingStats.losses || trainingStats.losses.length === 0) return;
+    if (!lossChartRef.current) return;
     
     const canvas = document.createElement('canvas');
     canvas.width = compact ? 300 : 400;
@@ -354,6 +357,7 @@ function AIVisualization({ trainingStats, isTraining, compact = false, showOnlyN
 
   const drawNetworkVisualization = useCallback(() => {
     if (!trainingStats.algorithm) return;
+    if (!networkRef.current) return;
     
     const canvas = document.createElement('canvas');
     canvas.width = compact ? 250 : 300;

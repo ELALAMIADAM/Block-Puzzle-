@@ -4,11 +4,11 @@ import { ConvDQNEnvironment } from '../ai/ConvDQNEnvironment';
 import AIVisualization from './AIVisualization';
 
 /**
- * VISUAL CNN TRAINING PANEL - 12x12 Pattern Recognition Mode
+ * VISUAL CNN TRAINING PANEL - 45x45 Pattern Recognition Mode
  * 
  * Features:
  * - CNN-based reinforcement learning
- * - 12x12 grid with 4-channel visual input
+ * - 45x45 grid with 4-channel visual input
  * - Advanced spatial pattern recognition
  * - Visual intelligence metrics
  * - Symmetry and harmony tracking
@@ -26,6 +26,7 @@ function VisualCNNTrainingPanel({
   const [isAIPlaying, setIsAIPlaying] = useState(false);
   const [trainingStats, setTrainingStats] = useState(null);
   const [episodeCount, setEpisodeCount] = useState(0);
+  const [maxEpisodes, setMaxEpisodes] = useState(500);
   const [trainingSpeed, setTrainingSpeed] = useState(1);
   const [modelStatus, setModelStatus] = useState('Not trained');
   const [visualMetrics, setVisualMetrics] = useState({
@@ -60,7 +61,7 @@ function VisualCNNTrainingPanel({
     setModelStatus('CNN initialized - Ready for visual training');
     
     console.log('🎨 VISUAL CNN TRAINING PANEL INITIALIZED');
-    console.log(`📐 Grid: 12x12 (144 cells)`);
+    console.log(`📐 Grid: 45x45 (2025 cells)`);
     console.log(`🖼️  Channels: 4 (grid, blocks, potentials, strategy)`);
     console.log(`🧠 Architecture: Convolutional Neural Network`);
 
@@ -92,6 +93,13 @@ function VisualCNNTrainingPanel({
       const stats = agentRef.current.getStats();
       setTrainingStats(stats);
       setEpisodeCount(stats.episode);
+      
+      // Check if we've reached max episodes
+      if (stats.episode >= maxEpisodes) {
+        stopTraining();
+        setModelStatus(`Visual CNN training completed - ${maxEpisodes} episodes`);
+        return;
+      }
       
       // Update visual metrics
       const env = environmentRef.current;
@@ -130,7 +138,7 @@ function VisualCNNTrainingPanel({
       agent.startEpisode();
       let totalReward = 0;
       let stepCount = 0;
-      const maxSteps = 200; // Increased for larger 12x12 grid
+      const maxSteps = 300; // Increased for larger 15x15 grid
       
       while (!environment.gameOver && stepCount < maxSteps) {
         // Get valid actions
@@ -334,10 +342,10 @@ function VisualCNNTrainingPanel({
   return (
     <div className="visual-cnn-training-panel">
       <div className="training-header">
-        <h3>🎨 Visual CNN Training - 12x12 Pattern Recognition</h3>
+        <h3>🎨 Visual CNN Training - 45x45 Pattern Recognition</h3>
         <div className="model-info">
           <span className="model-status">{modelStatus}</span>
-          <span className="episode-count">Episodes: {episodeCount}</span>
+          <span className="episode-count">Episodes: {episodeCount}/{maxEpisodes}</span>
         </div>
       </div>
 
@@ -396,6 +404,23 @@ function VisualCNNTrainingPanel({
               <option value={5}>5x (Extreme)</option>
             </select>
           </div>
+          
+          <div className="episode-control">
+            <label>Max Episodes: </label>
+            <input
+              type="number"
+              value={maxEpisodes}
+              onChange={(e) => setMaxEpisodes(parseInt(e.target.value))}
+              min="50"
+              max="5000"
+              step="50"
+              disabled={isTraining}
+              style={{ marginLeft: '10px', padding: '5px', width: '100px' }}
+            />
+            <span style={{ fontSize: '12px', color: '#7f8c8d', marginLeft: '5px' }}>
+              ({episodeCount}/{maxEpisodes})
+            </span>
+          </div>
         </div>
 
         <div className="control-group">
@@ -412,7 +437,7 @@ function VisualCNNTrainingPanel({
             )}
           </div>
           <div className="ai-info">
-            <small>🖼️ Uses 12x12 visual patterns adapted to current 9x9 game</small>
+            <small>🖼️ Uses 15x15 visual patterns adapted to current 9x9 game</small>
           </div>
         </div>
 
@@ -434,7 +459,7 @@ function VisualCNNTrainingPanel({
         <h4>🏗️ CNN Architecture</h4>
         <div className="architecture-details">
           <div className="arch-item">
-            <strong>Input:</strong> 4-channel 12×12 visual state
+            <strong>Input:</strong> 4-channel 15×15 visual state
           </div>
           <div className="arch-item">
             <strong>Channels:</strong> Grid, Blocks, Potentials, Strategy

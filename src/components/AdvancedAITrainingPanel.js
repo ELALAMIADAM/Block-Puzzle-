@@ -19,7 +19,7 @@ function AdvancedAITrainingPanel({
   const [isTraining, setIsTraining] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [trainingStats, setTrainingStats] = useState({});
-  const [trainingEpisodes, setTrainingEpisodes] = useState(100); // Fewer episodes for faster algorithms
+  const [trainingEpisodes, setTrainingEpisodes] = useState(500); // Increased for better training
   const [autoPlay, setAutoPlay] = useState(false);
   const [playSpeed, setPlaySpeed] = useState(500);
   const [algorithmComparison, setAlgorithmComparison] = useState({});

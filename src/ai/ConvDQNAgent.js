@@ -63,7 +63,7 @@ export class ConvDQNAgent {
     
     console.log('🎨 VISUAL CNN-DQN AGENT INITIALIZED');
     console.log(`🖼️  Input Shape: [${Array.isArray(this.visualStateSize) ? this.visualStateSize.join(', ') : this.visualStateSize}]`);
-    console.log(`🧠 Architecture: CNN for 12×12 spatial pattern recognition`);
+    console.log(`🧠 Architecture: CNN for 15×15 spatial pattern recognition`);
     console.log(`🎯 Focus: Line clearing with visual intelligence`);
   }
 

@@ -820,7 +820,7 @@ function AITrainingPanel({
               value={trainingEpisodes}
               onChange={(e) => setTrainingEpisodes(parseInt(e.target.value))}
               min="10"
-              max="10000"
+              max="20000"
               disabled={isTraining}
             />
             <span style={{ fontSize: '12px', color: '#D2B48C' }}>
@@ -1071,18 +1071,28 @@ function AITrainingPanel({
               <div style={{ marginBottom: '10px', color: '#D2B48C', fontSize: '14px' }}>
                 Available Blocks
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <div style={{ 
+                display: 'flex', 
+                flexDirection: 'column', 
+                gap: '10px',
+                height: '380px', // Increased height to eliminate scrollbar
+                overflowY: 'auto', // Allow scrolling if needed
+                paddingRight: '5px' // Space for scrollbar
+              }}>
                 {trainingBlocks.map((block, blockIndex) => (
                   <div key={blockIndex} style={{
                     padding: '8px',
                     background: 'rgba(139, 69, 19, 0.3)',
                     borderRadius: '5px',
-                    border: '1px solid #8B4513'
+                    border: '1px solid #8B4513',
+                    flexShrink: 0 // Prevent individual blocks from shrinking
                   }}>
                     <div style={{
                       display: 'grid',
                       gridTemplateColumns: `repeat(${Math.max(...block.map(row => row.length))}, 1fr)`,
-                      gap: '1px'
+                      gap: '1px',
+                      justifyContent: 'center', // Center the block display
+                      alignItems: 'center'
                     }}>
                       {block.map((row, rowIndex) =>
                         row.map((cell, colIndex) => (
@@ -1101,6 +1111,24 @@ function AITrainingPanel({
                         ))
                       )}
                     </div>
+                  </div>
+                ))}
+                {/* Fill empty space to maintain height consistency */}
+                {trainingBlocks.length < 3 && Array.from({ length: 3 - trainingBlocks.length }).map((_, index) => (
+                  <div key={`empty-${index}`} style={{
+                    padding: '8px',
+                    background: 'rgba(139, 69, 19, 0.1)',
+                    borderRadius: '5px',
+                    border: '1px dashed #8B4513',
+                    height: '50px', // Minimum height for empty slots
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#8B4513',
+                    fontSize: '12px',
+                    flexShrink: 0
+                  }}>
+                    Empty
                   </div>
                 ))}
               </div>
