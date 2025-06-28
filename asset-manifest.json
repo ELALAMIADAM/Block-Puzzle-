@@ -1,10 +1,10 @@
 {
   "files": {
-    "main.css": "/Blocks/static/css/main.62c6bf1c.css",
-    "main.js": "/Blocks/static/js/main.83e4b72e.js",
-    "index.html": "/Blocks/index.html",
-    "main.62c6bf1c.css.map": "/Blocks/static/css/main.62c6bf1c.css.map",
-    "main.83e4b72e.js.map": "/Blocks/static/js/main.83e4b72e.js.map"
+    "main.css": "/Block-Puzzle-/static/css/main.62c6bf1c.css",
+    "main.js": "/Block-Puzzle-/static/js/main.83e4b72e.js",
+    "index.html": "/Block-Puzzle-/index.html",
+    "main.62c6bf1c.css.map": "/Block-Puzzle-/static/css/main.62c6bf1c.css.map",
+    "main.83e4b72e.js.map": "/Block-Puzzle-/static/js/main.83e4b72e.js.map"
   },
   "entrypoints": [
     "static/css/main.62c6bf1c.css",
