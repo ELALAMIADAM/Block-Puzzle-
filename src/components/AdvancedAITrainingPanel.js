@@ -19,7 +19,7 @@ function AdvancedAITrainingPanel({
   const [isTraining, setIsTraining] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [trainingStats, setTrainingStats] = useState({});
-  const [trainingEpisodes, setTrainingEpisodes] = useState(100); // Fewer episodes for faster algorithms
+  const [trainingEpisodes, setTrainingEpisodes] = useState(500); // Increased for better training
   const [autoPlay, setAutoPlay] = useState(false);
   const [playSpeed, setPlaySpeed] = useState(500);
   const [algorithmComparison, setAlgorithmComparison] = useState({});
@@ -53,9 +53,9 @@ function AdvancedAITrainingPanel({
         rolloutPolicy: 'heuristic'
       }
     },
-    'policy_gradient': {
+    'policy-gradient': {
       displayName: 'Policy Gradient',
-      description: 'Direct policy optimization',
+      description: 'Direct policy optimization with action masking',
       options: {
         learningRate: 0.001,
         gamma: 0.99,
@@ -175,7 +175,7 @@ function AdvancedAITrainingPanel({
           const state = environment.getState();
           action = await agent.act(state, validActions, environment);
           state.dispose();
-        } else if (selectedAlgorithm === 'policy_gradient') {
+        } else if (selectedAlgorithm === 'policy-gradient') {
           const state = environment.getState();
           action = await agent.selectAction(state, validActions);
           state.dispose();
@@ -192,7 +192,7 @@ function AdvancedAITrainingPanel({
         // Store experience for learning algorithms
         if (selectedAlgorithm === 'dqn') {
           // DQN handles its own experience storage
-        } else if (selectedAlgorithm === 'policy_gradient') {
+        } else if (selectedAlgorithm === 'policy-gradient') {
           agent.remember(stepResult.reward);
         }
         
@@ -282,7 +282,7 @@ function AdvancedAITrainingPanel({
         const state = environment.getState();
         action = await agent.selectBestAction(state, validActions);
         state.dispose();
-      } else if (selectedAlgorithm === 'policy_gradient') {
+      } else if (selectedAlgorithm === 'policy-gradient') {
         const state = environment.getState();
         action = await agent.selectAction(state, validActions);
         state.dispose();
@@ -321,7 +321,7 @@ function AdvancedAITrainingPanel({
   const runAlgorithmComparison = async () => {
     console.log('🏁 Starting algorithm comparison...');
     
-    const algorithms = ['heuristic', 'mcts', 'policy_gradient'];
+    const algorithms = ['heuristic', 'mcts', 'policy-gradient'];
     const comparisonResults = {};
     
     for (const algo of algorithms) {

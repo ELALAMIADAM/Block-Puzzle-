@@ -1,10 +1,10 @@
 import * as tf from '@tensorflow/tfjs';
-import { canPlaceBlock, checkGameOver, generateRandomBlocks, getBlockSize } from '../utils/gameLogic';
+
+// DQN CONFIGURATION - Optimized for Learning
 
 const GRID_SIZE = 9; // FIXED: Always 9x9 for neural network consistency
 const MAX_BLOCKS = 3;
 const MAX_BLOCK_SIZE = 3; // 3x3 maximum block dimensions
-const STATE_SIZE = 81 + (MAX_BLOCKS * MAX_BLOCK_SIZE * MAX_BLOCK_SIZE) + 4; // 112 total
 
 export class DQNEnvironment {
   constructor() {
@@ -902,7 +902,7 @@ export class DQNEnvironment {
     if (this.canPlaceBlockAtPosition(blockShape, row, col)) {
       this.placeBlock(blockShape, row, col, blockIndex);
       
-      const reward = this.calculateReward(oldGrid, oldScore, getBlockSize(blockShape));
+      const reward = this.calculateReward(oldGrid, oldScore, this.getBlockSize(blockShape));
       const newState = this.getState();
       
       return {
@@ -953,5 +953,20 @@ export class DQNEnvironment {
       score: this.score,
       done: this.gameOver
     };
+  }
+
+  getBlockSize(blockShape) {
+    // Simple implementation to count filled cells in block
+    if (!blockShape || !Array.isArray(blockShape)) return 1;
+    
+    let size = 0;
+    for (let row = 0; row < blockShape.length; row++) {
+      for (let col = 0; col < blockShape[row].length; col++) {
+        if (blockShape[row][col]) {
+          size++;
+        }
+      }
+    }
+    return size || 1; // Ensure at least 1
   }
 } 

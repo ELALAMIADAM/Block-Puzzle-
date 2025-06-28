@@ -260,7 +260,19 @@ export class EliteEnvironment {
       if (state.length > ELITE_STATE_SIZE) state.splice(ELITE_STATE_SIZE);
     }
     
-    return new Float32Array(state);
+    return tf.tensor1d(state);
+  }
+
+  /**
+   * DECODE ACTION for Elite DQN compatibility
+   */
+  decodeAction(actionId) {
+    const blockIndex = Math.floor(actionId / 81);
+    const remainder = actionId % 81;
+    const row = Math.floor(remainder / 9);
+    const col = remainder % 9;
+    
+    return { blockIndex, row, col };
   }
 
   /**
@@ -978,14 +990,8 @@ export class EliteEnvironment {
   }
 
   dispose() {
-    this.qNetwork.dispose();
-    this.targetNetwork.dispose();
-    
-    this.memory.forEach(exp => {
-      if (exp.state && exp.state.dispose) exp.state.dispose();
-      if (exp.nextState && exp.nextState.dispose) exp.nextState.dispose();
-    });
-    this.memory = [];
+    // EliteEnvironment doesn't have neural networks, just clear any tensor-related data
+    console.log('✅ EliteEnvironment disposed (no resources to clean up)');
   }
 
   /**

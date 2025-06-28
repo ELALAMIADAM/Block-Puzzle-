@@ -1,54 +1,55 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { DQNAgent } from '../ai/DQNAgent';
 import { DQNEnvironment } from '../ai/DQNEnvironment';
 import { EliteDQNAgent } from '../ai/EliteDQNAgent';
-import { EliteEnvironment } from '../ai/EliteEnvironment';
+import { ConvDQNAgent } from '../ai/ConvDQNAgent';
+import { ConvDQNEnvironment } from '../ai/ConvDQNEnvironment';
 import { AlgorithmSelector } from '../ai/AdvancedAIAgents';
-
 import AIVisualization from './AIVisualization';
 import GameBoard from './GameBoard';
 import BlockTray from './BlockTray';
 import ScoreDisplay from './ScoreDisplay';
-import AdvancedAITrainingPanel from './AdvancedAITrainingPanel';
-import { generateRandomBlocks, checkGameOver } from '../utils/gameLogic';
 
 function AILearningView({ onNavigate }) {
   // Algorithm Selection
   const [selectedAlgorithm, setSelectedAlgorithm] = useState('dqn');
   
-  // Training State
+  // Training State  
   const [isTraining, setIsTraining] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [visualTraining, setVisualTraining] = useState(true);
   const [trainingSpeed, setTrainingSpeed] = useState(50);
-  const [maxEpisodes, setMaxEpisodes] = useState(500);
+  const [aiPlayInterval, setAiPlayInterval] = useState(null);
   
   // Game State
   const [grid, setGrid] = useState(Array(9).fill(null).map(() => Array(9).fill(false)));
   const [availableBlocks, setAvailableBlocks] = useState([]);
   const [score, setScore] = useState(0);
   const [bestScore, setBestScore] = useState(0);
-  const [difficulty, setDifficulty] = useState('normal');
-  const [gameOver, setGameOver] = useState(false);
-  const [linesCleared, setLinesCleared] = useState(0);
-  const [totalLinesCleared, setTotalLinesCleared] = useState(0);
+  const [difficulty] = useState('normal');
   
   // Training Progress
   const [currentEpisode, setCurrentEpisode] = useState(0);
+  const [maxEpisodes, setMaxEpisodes] = useState(500);
   const [episodeScore, setEpisodeScore] = useState(0);
   const [episodeSteps, setEpisodeSteps] = useState(0);
-  const [trainingStats, setTrainingStats] = useState({});
-  
+  const [trainingStats, setTrainingStats] = useState({
+    losses: [],
+    rewards: [],
+    scores: [],
+    epsilon: 1.0
+  });
+
   // AI Components
   const [agent, setAgent] = useState(null);
   const [environment, setEnvironment] = useState(null);
   
   // UI State
   const [showTips, setShowTips] = useState(false);
-  const [testResults, setTestResults] = useState({});
+  const [testResults] = useState({});
   
   // Refs for training control
   const trainingRef = useRef(false);
@@ -56,7 +57,7 @@ function AILearningView({ onNavigate }) {
   const stepRef = useRef(0);
 
   // Algorithm configurations - ALL USE SAME ENVIRONMENT FOR FAIR COMPARISON
-  const algorithmConfigs = {
+  const algorithmConfigs = useMemo(() => ({
     'dqn': {
       name: 'Original DQN',
       description: 'Deep Q-Network with experience replay',
@@ -81,6 +82,20 @@ function AILearningView({ onNavigate }) {
         epsilonDecay: 0.9995,
         gamma: 0.99,
         batchSize: 64
+      }
+    },
+    'visual-cnn': {
+      name: 'Visual CNN DQN',
+      description: 'Revolutionary CNN-based DQN with 15×15 grid and 4-channel visual intelligence',
+      agentClass: ConvDQNAgent,
+      environmentClass: ConvDQNEnvironment,
+      options: {
+        learningRate: 0.0005,
+        epsilon: 0.8,
+        epsilonDecay: 0.996,
+        gamma: 0.99,
+        batchSize: 32,
+        patternGuidedRate: 0.4
       }
     },
     'mcts': {
@@ -116,7 +131,7 @@ function AILearningView({ onNavigate }) {
         futureOpportunityWeight: 100
       }
     }
-  };
+  }), []);
 
   // Initialize agent and environment when algorithm changes
   const initializeAgent = useCallback(() => {
@@ -128,7 +143,16 @@ function AILearningView({ onNavigate }) {
     let newAgent;
     if (config.agentClass) {
       // Use specific agent class (DQN variants)
-      newAgent = new config.agentClass(env.getStateSize(), env.getMaxActionSpace(), config.options);
+      let stateSize;
+      if (selectedAlgorithm === 'visual-cnn') {
+        // ConvDQNAgent expects visual state size as array [channels, height, width]
+        stateSize = env.getVisualStateSize();
+      } else {
+        // Other agents expect state size as number
+        stateSize = env.getStateSize();
+      }
+      
+      newAgent = new config.agentClass(stateSize, env.getMaxActionSpace(), config.options);
     } else {
       // Use AlgorithmSelector for advanced algorithms
       newAgent = AlgorithmSelector.createAgent(selectedAlgorithm, env.getStateSize(), env.getMaxActionSpace(), config.options);
@@ -142,11 +166,10 @@ function AILearningView({ onNavigate }) {
     setGrid(env.grid.map(row => [...row]));
     setAvailableBlocks(env.availableBlocks.map(block => block.map(row => [...row])));
     setScore(env.score);
-    setLinesCleared(0);
-    setGameOver(false);
+    setBestScore(Math.max(bestScore, env.score));
     
     console.log(`✅ ${config.name} initialized successfully!`);
-  }, [selectedAlgorithm]);
+  }, [selectedAlgorithm, algorithmConfigs, bestScore]);
 
   useEffect(() => {
     initializeAgent();
@@ -285,9 +308,8 @@ function AILearningView({ onNavigate }) {
           case 'heuristic':
             action = await agent.selectAction(environment);
             break;
+          case 'visual-cnn':
           case 'elite-dqn':
-            action = await agent.act(state, validActions, environment);
-            break;
           case 'dqn':
           default:
             action = await agent.act(state, validActions, environment);
@@ -342,6 +364,7 @@ function AILearningView({ onNavigate }) {
           case 'heuristic':
             // Heuristic doesn't need training, it's rule-based
             break;
+          case 'visual-cnn':
           case 'elite-dqn':
           case 'dqn':
           default:
@@ -363,9 +386,13 @@ function AILearningView({ onNavigate }) {
         done = stepResult.done;
         stepCount++;
         
-        // Add new blocks when needed - use DQNEnvironment's curriculum blocks
+        // Add new blocks when needed - use environment-specific block generation
         if (environment.availableBlocks.length === 0 && !done) {
-          environment.availableBlocks = environment.generateCurriculumBlocks(); // DQNEnvironment method
+          if (selectedAlgorithm === 'visual-cnn') {
+            environment.availableBlocks = environment.generateVisualBlocks(); // ConvDQNEnvironment method
+          } else {
+            environment.availableBlocks = environment.generateCurriculumBlocks(); // DQNEnvironment method
+          }
           done = environment.checkGameOver();
           
           if (visualTraining) {
@@ -395,6 +422,7 @@ function AILearningView({ onNavigate }) {
             agent.endEpisode(finalGameScore); // Use real game score
           }
           break;
+        case 'visual-cnn':
         case 'elite-dqn':
         case 'dqn':
         default:
@@ -480,13 +508,13 @@ function AILearningView({ onNavigate }) {
           // Load policy gradient model
           if (agent.loadModel && typeof agent.loadModel === 'function') {
             // Try to find a saved model
-            const pgKeys = Object.keys(localStorage).filter(key => 
-              key.includes('policy_gradient') && key.includes('model')
+            const modelKeys = Object.keys(localStorage).filter(key => 
+              key.includes('policy-gradient') && key.includes('model')
             );
             
-            if (pgKeys.length > 0) {
-              const latestPgKey = pgKeys.sort().pop();
-              success = await agent.loadModel(latestPgKey);
+            if (modelKeys.length > 0) {
+              const latestModelKey = modelKeys.sort().pop();
+              success = await agent.loadModel(latestModelKey);
             } else {
               throw new Error('No saved Policy Gradient models found');
             }
@@ -495,6 +523,7 @@ function AILearningView({ onNavigate }) {
           }
           break;
           
+        case 'visual-cnn':
         case 'elite-dqn':
         case 'dqn':
         default:
@@ -628,6 +657,7 @@ function AILearningView({ onNavigate }) {
           }
           break;
           
+        case 'visual-cnn':
         case 'elite-dqn':
         case 'dqn':
         default:
@@ -700,18 +730,18 @@ function AILearningView({ onNavigate }) {
           <div className="tip-section">
             <h4>🎮 Training Controls</h4>
             <ul>
+              <li><strong>Start Training:</strong> Begin AI learning process</li>
               <li><strong>Pause/Resume:</strong> Temporarily halt training and continue later</li>
               <li><strong>Stop:</strong> End training session completely</li>
-              <li><strong>Reset:</strong> Clear AI memory and start fresh training</li>
-              <li><strong>Speed Control:</strong> Adjust how fast the AI plays during training</li>
+              <li><strong>Reset All Stats:</strong> Clear all progress and start fresh training</li>
+              <li><strong>Speed Control:</strong> Adjust how fast the AI trains during learning</li>
             </ul>
           </div>
           
           <div className="tip-section">
-            <h4>🧪 Testing & Models</h4>
+            <h4>💾 Model Management</h4>
             <ul>
-              <li><strong>Test Model:</strong> See how well your trained AI performs</li>
-              <li><strong>Download Model:</strong> Save your trained AI for later use</li>
+              <li><strong>Download Model:</strong> Save your trained AI to your computer</li>
               <li><strong>Load Model:</strong> Restore a previously saved AI model</li>
             </ul>
           </div>
@@ -919,7 +949,7 @@ function AILearningView({ onNavigate }) {
         {/* Training Controls */}
         <div className="training-controls" style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+          gridTemplateColumns: '1fr 1fr 1fr',
           gap: '15px',
           marginBottom: '20px'
         }}>
@@ -999,86 +1029,42 @@ function AILearningView({ onNavigate }) {
 
           {/* Model Management Section with Improved UI */}
           <div className="control-group">
-            <label style={{ 
-              color: '#FFD700', 
-              fontWeight: 'bold', 
-              marginBottom: '12px', 
-              display: 'block',
-              fontSize: '16px',
-              textAlign: 'center'
-            }}>
-              💾 Model Management
+            <label style={{ color: '#FFD700', fontWeight: 'bold', marginBottom: '8px', display: 'block' }}>
+              Model Management
             </label>
-            
-            <div style={{ display: 'flex', gap: '15px', justifyContent: 'center', flexWrap: 'wrap' }}>
-               <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
-                  <button
-                    onClick={loadModel}
-                    disabled={!agent || isTraining || isPlaying}
-                    className="btn load"
-                    style={{
-                      flex: 1,
-                      padding: '15px 25px',
-                      borderRadius: '12px',
-                      border: 'none',
-                      background: 'linear-gradient(145deg, #fd7e14, #e8590c)',
-                      color: 'white',
-                      fontWeight: 'bold',
-                      fontSize: '14px',
-                      boxShadow: '0 4px 12px rgba(253, 126, 20, 0.3)',
-                      transition: 'all 0.3s ease',
-                      cursor: (!agent || isTraining || isPlaying) ? 'not-allowed' : 'pointer',
-                      opacity: (!agent || isTraining || isPlaying) ? 0.6 : 1
-                    }}
-                    onMouseOver={(e) => {
-                      if (!(!agent || isTraining || isPlaying)) {
-                        e.target.style.transform = 'translateY(-2px)';
-                        e.target.style.boxShadow = '0 6px 16px rgba(253, 126, 20, 0.4)';
-                      }
-                    }}
-                    onMouseOut={(e) => {
-                      if (!(!agent || isTraining || isPlaying)) {
-                        e.target.style.transform = 'translateY(0)';
-                        e.target.style.boxShadow = '0 4px 12px rgba(253, 126, 20, 0.3)';
-                      }
-                    }}
-                  >
-                    📁 Load Model
-                  </button>
-               </div>
-                
-                <button
-                  onClick={downloadModel}
-                  disabled={!agent || isTraining || isPlaying}
-                  className="btn download"
-                  style={{
-                    padding: '15px 25px',
-                    borderRadius: '12px',
-                    border: 'none',
-                    background: 'linear-gradient(145deg, #17a2b8, #138496)',
-                    color: 'white',
-                    fontWeight: 'bold',
-                    fontSize: '14px',
-                    boxShadow: '0 4px 12px rgba(23, 162, 184, 0.3)',
-                    transition: 'all 0.3s ease',
-                    cursor: (!agent || isTraining || isPlaying) ? 'not-allowed' : 'pointer',
-                    opacity: (!agent || isTraining || isPlaying) ? 0.6 : 1
-                  }}
-                  onMouseOver={(e) => {
-                    if (!(!agent || isTraining || isPlaying)) {
-                      e.target.style.transform = 'translateY(-2px)';
-                      e.target.style.boxShadow = '0 6px 16px rgba(23, 162, 184, 0.4)';
-                    }
-                  }}
-                  onMouseOut={(e) => {
-                    if (!(!agent || isTraining || isPlaying)) {
-                      e.target.style.transform = 'translateY(0)';
-                      e.target.style.boxShadow = '0 4px 12px rgba(23, 162, 184, 0.3)';
-                    }
-                  }}
-                >
-                  🔽 Download Model
-                </button>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button
+                onClick={loadModel}
+                disabled={!agent || isTraining || isPlaying}
+                className="btn load"
+                style={{
+                  flex: 1,
+                  padding: '12px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  background: 'linear-gradient(145deg, #fd7e14, #e8590c)',
+                  color: 'white',
+                  fontWeight: 'bold'
+                }}
+              >
+                📁 Load Model
+              </button>
+              <button
+                onClick={downloadModel}
+                disabled={!agent || isTraining || isPlaying}
+                className="btn download"
+                style={{
+                  flex: 1,
+                  padding: '12px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  background: 'linear-gradient(145deg, #17a2b8, #138496)',
+                  color: 'white',
+                  fontWeight: 'bold'
+                }}
+              >
+                🔽 Download Model
+              </button>
             </div>
             
             <div style={{
@@ -1094,156 +1080,209 @@ function AILearningView({ onNavigate }) {
 
           {/* Improved Episode Input Section */}
           <div className="control-group">
-            <label style={{ 
-              color: '#FFD700', 
-              fontWeight: 'bold', 
-              marginBottom: '12px', 
-              display: 'block',
-              fontSize: '16px'
-            }}>
-              📊 Training Episodes: {maxEpisodes.toLocaleString()}
-            </label>
-            
-            <div style={{
-              background: 'rgba(139, 69, 19, 0.3)',
-              padding: '15px',
-              borderRadius: '12px',
-              border: '2px solid #8B4513',
-              marginBottom: '15px'
-            }}>
-              <input
-                type="number"
-                min="10"
-                max="10000"
-                value={maxEpisodes}
-                onChange={(e) => setMaxEpisodes(parseInt(e.target.value))}
-                disabled={isTraining}
-                style={{
-                  width: '100%',
-                  padding: '12px 16px',
-                  borderRadius: '8px',
-                  border: '2px solid #8B4513',
-                  background: 'rgba(255, 215, 0, 0.1)',
-                  color: '#FFD700',
-                  fontSize: '16px',
-                  fontWeight: 'bold',
-                  textAlign: 'center',
-                  outline: 'none',
-                  transition: 'all 0.3s ease'
-                }}
-                onFocus={(e) => {
-                  e.target.style.borderColor = '#FFD700';
-                  e.target.style.boxShadow = '0 0 10px rgba(255, 215, 0, 0.3)';
-                }}
-                onBlur={(e) => {
-                  e.target.style.borderColor = '#8B4513';
-                  e.target.style.boxShadow = 'none';
-                }}
-              />
-              
-              {/* Quick Preset Buttons */}
-              <div style={{ 
-                display: 'flex', 
-                gap: '8px', 
-                flexWrap: 'wrap', 
-                marginTop: '12px',
-                justifyContent: 'center'
-              }}>
-                {[100, 500, 1000, 2000, 5000].map(episodes => (
-                  <button
-                    key={episodes}
-                    onClick={() => setMaxEpisodes(episodes)}
-                    disabled={isTraining}
-                    style={{
-                      padding: '8px 12px',
-                      borderRadius: '8px',
-                      border: 'none',
-                      background: maxEpisodes === episodes 
-                        ? 'linear-gradient(145deg, #FFD700, #FFA500)' 
-                        : 'linear-gradient(145deg, rgba(139, 69, 19, 0.6), rgba(101, 50, 15, 0.8))',
-                      color: maxEpisodes === episodes ? '#2C1810' : '#D2B48C',
-                      fontSize: '12px',
-                      fontWeight: 'bold',
-                      cursor: isTraining ? 'not-allowed' : 'pointer',
-                      transition: 'all 0.2s ease',
-                      boxShadow: maxEpisodes === episodes 
-                        ? '0 2px 8px rgba(255, 215, 0, 0.3)' 
-                        : '0 2px 4px rgba(0, 0, 0, 0.2)',
-                      opacity: isTraining ? 0.6 : 1
-                    }}
-                    onMouseOver={(e) => {
-                      if (!isTraining) {
-                        e.target.style.transform = 'translateY(-1px)';
-                        e.target.style.boxShadow = maxEpisodes === episodes 
-                          ? '0 4px 12px rgba(255, 215, 0, 0.4)' 
-                          : '0 4px 8px rgba(0, 0, 0, 0.3)';
-                      }
-                    }}
-                    onMouseOut={(e) => {
-                      if (!isTraining) {
-                        e.target.style.transform = 'translateY(0)';
-                        e.target.style.boxShadow = maxEpisodes === episodes 
-                          ? '0 2px 8px rgba(255, 215, 0, 0.3)' 
-                          : '0 2px 4px rgba(0, 0, 0, 0.2)';
-                      }
-                    }}
-                  >
-                    {episodes.toLocaleString()}
-                  </button>
-                ))}
-              </div>
-              
-              <div style={{
-                textAlign: 'center',
-                marginTop: '10px',
-                fontSize: '11px',
-                color: '#D2B48C',
-                fontStyle: 'italic'
-              }}>
-                💡 Start with 100-500 episodes for initial learning, then increase for better performance
-              </div>
-            </div>
-          </div>
-
-          <div className="control-group">
             <label style={{ color: '#FFD700', fontWeight: 'bold', marginBottom: '8px', display: 'block' }}>
-              Training Speed: {trainingSpeed}%
+              Reset Training
             </label>
-            <input
-              type="range"
-              min="10"
-              max="100"
-              value={trainingSpeed}
-              onChange={(e) => setTrainingSpeed(parseInt(e.target.value))}
-              disabled={isTraining}
+            <button
+              onClick={resetTraining}
+              disabled={isTraining || isPlaying}
+              className="btn reset"
               style={{
                 width: '100%',
-                accentColor: '#FFD700'
+                padding: '12px',
+                borderRadius: '8px',
+                border: 'none',
+                background: 'linear-gradient(145deg, #6c757d, #5a6268)',
+                color: 'white',
+                fontWeight: 'bold'
               }}
-            />
-          </div>
-
-          <div className="control-group">
-            <label style={{ color: '#FFD700', fontWeight: 'bold', marginBottom: '8px', display: 'block' }}>
-              Training Options
-            </label>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <label style={{ color: '#D2B48C', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                <input
-                  type="checkbox"
-                  checked={visualTraining}
-                  onChange={(e) => setVisualTraining(e.target.checked)}
-                  disabled={isTraining}
-                  style={{ accentColor: '#FFD700' }}
-                />
-                Show Game Board
-              </label>
+            >
+              🔄 Reset All Stats
+            </button>
+            <div style={{ fontSize: '12px', color: '#D2B48C', marginTop: '5px', textAlign: 'center' }}>
+              Clear all progress and start fresh
             </div>
           </div>
         </div>
 
+        {/* Training Speed Control - Full Width */}
+        <div className="speed-control" style={{
+          background: 'rgba(139, 69, 19, 0.3)',
+          padding: '20px',
+          borderRadius: '12px',
+          border: '2px solid #8B4513',
+          marginBottom: '20px'
+        }}>
+          <div style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: '20px',
+            maxWidth: '600px',
+            margin: '0 auto'
+          }}>
+            <label style={{ 
+              color: '#FFD700', 
+              fontWeight: 'bold', 
+              minWidth: '140px',
+              fontSize: '16px'
+            }}>
+              ⚡ Training Speed:
+            </label>
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '15px' }}>
+              <span style={{ color: '#D2B48C', fontSize: '14px', minWidth: '30px' }}>
+                10%
+              </span>
+              <input
+                type="range"
+                min="10"
+                max="100"
+                value={trainingSpeed}
+                onChange={(e) => setTrainingSpeed(parseInt(e.target.value))}
+                disabled={isTraining}
+                style={{
+                  flex: 1,
+                  height: '8px',
+                  borderRadius: '4px',
+                  background: 'rgba(139, 69, 19, 0.5)',
+                  outline: 'none',
+                  accentColor: '#FFD700',
+                  cursor: isTraining ? 'not-allowed' : 'pointer'
+                }}
+              />
+              <span style={{ color: '#D2B48C', fontSize: '14px', minWidth: '40px' }}>
+                100%
+              </span>
+              <div style={{ 
+                background: 'rgba(255, 215, 0, 0.2)', 
+                padding: '6px 12px', 
+                borderRadius: '6px',
+                border: '1px solid #FFD700',
+                minWidth: '60px',
+                textAlign: 'center'
+              }}>
+                <span style={{ color: '#FFD700', fontWeight: 'bold', fontSize: '16px' }}>
+                  {trainingSpeed}%
+                </span>
+              </div>
+            </div>
+          </div>
+          <div style={{ 
+            fontSize: '12px', 
+            color: '#D2B48C', 
+            textAlign: 'center', 
+            marginTop: '10px' 
+          }}>
+            Higher speed = faster training but potentially less stable learning
+          </div>
+        </div>
+
+        {/* Episode Count Control */}
+        <div className="episode-control" style={{
+          background: 'rgba(139, 69, 19, 0.3)',
+          padding: '20px',
+          borderRadius: '12px',
+          border: '2px solid #8B4513',
+          marginBottom: '20px'
+        }}>
+          <div style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: '20px',
+            maxWidth: '600px',
+            margin: '0 auto'
+          }}>
+            <label style={{ 
+              color: '#FFD700', 
+              fontWeight: 'bold', 
+              minWidth: '140px',
+              fontSize: '16px'
+            }}>
+              🎯 Max Episodes:
+            </label>
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '15px' }}>
+              <input
+                type="number"
+                min="50"
+                max="5000"
+                step="50"
+                value={maxEpisodes}
+                onChange={(e) => setMaxEpisodes(parseInt(e.target.value))}
+                disabled={isTraining}
+                style={{
+                  flex: 1,
+                  padding: '8px 12px',
+                  borderRadius: '6px',
+                  border: '1px solid #8B4513',
+                  background: 'rgba(255, 255, 255, 0.9)',
+                  fontSize: '16px',
+                  textAlign: 'center'
+                }}
+              />
+              <div style={{ 
+                background: 'rgba(255, 215, 0, 0.2)', 
+                padding: '6px 12px', 
+                borderRadius: '6px',
+                border: '1px solid #FFD700',
+                minWidth: '120px',
+                textAlign: 'center'
+              }}>
+                <span style={{ color: '#FFD700', fontWeight: 'bold', fontSize: '14px' }}>
+                  {currentEpisode}/{maxEpisodes}
+                </span>
+              </div>
+            </div>
+          </div>
+          <div style={{ 
+            fontSize: '12px', 
+            color: '#D2B48C', 
+            textAlign: 'center', 
+            marginTop: '10px' 
+          }}>
+            Total episodes to train - more episodes usually mean better performance
+          </div>
+        </div>
+
         {/* Training Progress */}
-        
+        {(isTraining || currentEpisode > 0) && (
+          <div className="training-progress" style={{
+            background: 'rgba(139, 69, 19, 0.3)',
+            padding: '15px',
+            borderRadius: '8px',
+            border: '1px solid #8B4513',
+            marginBottom: '20px'
+          }}>
+            <div className="progress-header" style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '10px'
+            }}>
+              <h4 style={{ color: '#FFD700', margin: 0 }}>Training Progress</h4>
+            </div>
+            
+            <div className="progress-bar" style={{
+              width: '100%',
+              height: '20px',
+              background: 'rgba(139, 69, 19, 0.5)',
+              borderRadius: '10px',
+              overflow: 'hidden',
+              marginBottom: '10px'
+            }}>
+              <div 
+                className="progress-fill"
+                style={{ 
+                  width: `${(currentEpisode / maxEpisodes) * 100}%`,
+                  height: '100%',
+                  background: 'linear-gradient(90deg, #FFD700, #FFA500)',
+                  transition: 'width 0.3s ease'
+                }}
+              />
+            </div>
+            <div className="progress-text" style={{ color: '#D2B48C', fontSize: '14px', textAlign: 'center' }}>
+              Episode {currentEpisode} / {maxEpisodes} ({((currentEpisode / maxEpisodes) * 100).toFixed(1)}%)
+            </div>
+          </div>
+        )}
 
         {/* Status Indicators */}
         {(isTraining || isPlaying) && (
@@ -1338,153 +1377,62 @@ function AILearningView({ onNavigate }) {
                   />
                 </div>
 
-                {/* Available Blocks */}
-                <div style={{
-                  background: 'rgba(139, 69, 19, 0.3)',
-                  padding: '15px',
-                  borderRadius: '8px',
-                  border: '1px solid #8B4513'
+              {/* Available Blocks */}
+              <div style={{
+                background: 'rgba(139, 69, 19, 0.3)',
+                padding: '15px',
+                borderRadius: '8px',
+                border: '1px solid #8B4513',
+                height: '380px', // Increased height to eliminate scrollbar
+                display: 'flex',
+                flexDirection: 'column'
+              }}>
+                <h5 style={{ color: '#FFD700', marginBottom: '10px', margin: '0 0 10px 0' }}>Available Blocks</h5>
+                <div style={{ 
+                  flex: 1,
+                  overflow: 'hidden', // Prevent content overflow
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
                 }}>
-                  <h5 style={{ color: '#FFD700', marginBottom: '10px' }}>Available Blocks</h5>
                   <BlockTray blocks={availableBlocks} disabled={true} />
                 </div>
+              </div>
 
-                {/* Episode Info */}
-                <div style={{
-                  background: 'rgba(139, 69, 19, 0.3)',
-                  padding: '15px',
-                  borderRadius: '8px',
-                  border: '1px solid #8B4513'
-                }}>
-                  <h5 style={{ color: '#FFD700', marginBottom: '10px' }}>Episode Info</h5>
-                  <div className="episode-stats">
-                    <div className="info-item" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
-                      <span style={{ color: '#D2B48C' }}>Episode:</span>
-                      <span style={{ color: '#FFD700', fontWeight: 'bold' }}>{currentEpisode}</span>
-                    </div>
-                    <div className="info-item" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
-                      <span style={{ color: '#D2B48C' }}>Score:</span>
-                      <span style={{ color: '#FFD700', fontWeight: 'bold' }}>{score}</span>
-                    </div>
-                    <div className="info-item" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
-                      <span style={{ color: '#D2B48C' }}>Lines Cleared:</span>
-                      <span style={{ color: '#FFD700', fontWeight: 'bold' }}>{linesCleared}</span>
-                    </div>
-                    <div className="info-item" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
-                      <span style={{ color: '#D2B48C' }}>Steps:</span>
-                      <span style={{ color: '#FFD700', fontWeight: 'bold' }}>{episodeSteps}</span>
-                    </div>
-                    <div className="info-item" style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span style={{ color: '#D2B48C' }}>Algorithm:</span>
-                      <span style={{ color: '#FFD700', fontWeight: 'bold' }}>{algorithmConfigs[selectedAlgorithm].name}</span>
-                    </div>
+              {/* Episode Info */}
+              <div style={{
+                background: 'rgba(139, 69, 19, 0.3)',
+                padding: '15px',
+                borderRadius: '8px',
+                border: '1px solid #8B4513'
+              }}>
+                <h5 style={{ color: '#FFD700', marginBottom: '10px' }}>Episode Info</h5>
+                <div className="episode-stats">
+                  <div className="info-item" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
+                    <span style={{ color: '#D2B48C' }}>Episode:</span>
+                    <span style={{ color: '#FFD700', fontWeight: 'bold' }}>{currentEpisode}</span>
+                  </div>
+                  <div className="info-item" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
+                    <span style={{ color: '#D2B48C' }}>Episode Score:</span>
+                    <span style={{ color: '#FFD700', fontWeight: 'bold' }}>{episodeScore}</span>
+                  </div>
+                  <div className="info-item" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
+                    <span style={{ color: '#D2B48C' }}>Total Score:</span>
+                    <span style={{ color: '#FFD700', fontWeight: 'bold' }}>{score}</span>
+                  </div>
+                  <div className="info-item" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
+                    <span style={{ color: '#D2B48C' }}>Steps:</span>
+                    <span style={{ color: '#FFD700', fontWeight: 'bold' }}>{episodeSteps}</span>
+                  </div>
+                  <div className="info-item" style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#D2B48C' }}>Algorithm:</span>
+                    <span style={{ color: '#FFD700', fontWeight: 'bold' }}>{algorithmConfigs[selectedAlgorithm].name}</span>
                   </div>
                 </div>
               </div>
             </div>
-          </DndProvider>
-        )}
-
-        {/* Quick Stats when visualization is hidden */}
-        {!visualTraining && (isTraining || isPlaying) && (
-          <div style={{
-            background: 'rgba(139, 69, 19, 0.3)',
-            padding: '20px',
-            borderRadius: '12px',
-            border: '2px solid #8B4513',
-            marginBottom: '20px'
-          }}>
-            <h4 style={{ color: '#FFD700', marginBottom: '15px', textAlign: 'center' }}>
-              🚀 Training in Progress (Fast Mode) - {currentEpisode}/{maxEpisodes}
-            </h4>
-            
-            <div style={{ 
-              display: 'grid', 
-              gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', 
-              gap: '15px',
-              textAlign: 'center'
-            }}>
-              <div style={{
-                background: 'rgba(255, 215, 0, 0.1)',
-                padding: '15px',
-                borderRadius: '8px',
-                border: '1px solid #FFD700'
-              }}>
-                <div style={{ color: '#FFD700', fontWeight: 'bold', fontSize: '18px' }}>
-                  {currentEpisode}/{maxEpisodes}
-                </div>
-                <div style={{ color: '#D2B48C', fontSize: '12px' }}>
-                  Episode Progress ({((currentEpisode / maxEpisodes) * 100).toFixed(1)}%)
-                </div>
-              </div>
-              
-              <div style={{
-                background: 'rgba(255, 215, 0, 0.1)',
-                padding: '15px',
-                borderRadius: '8px',
-                border: '1px solid #FFD700'
-              }}>
-                <div style={{ color: '#28a745', fontWeight: 'bold', fontSize: '18px' }}>
-                  {score}
-                </div>
-                <div style={{ color: '#D2B48C', fontSize: '12px' }}>
-                  Current Score
-                </div>
-              </div>
-              
-                             <div style={{
-                 background: 'rgba(255, 215, 0, 0.1)',
-                 padding: '15px',
-                 borderRadius: '8px',
-                 border: '1px solid #FFD700'
-               }}>
-                 <div style={{ color: '#17a2b8', fontWeight: 'bold', fontSize: '18px' }}>
-                   {linesCleared}
-                 </div>
-                 <div style={{ color: '#D2B48C', fontSize: '12px' }}>
-                   Lines This Episode
-                 </div>
-               </div>
-               
-               <div style={{
-                 background: 'rgba(255, 215, 0, 0.1)',
-                 padding: '15px',
-                 borderRadius: '8px',
-                 border: '1px solid #FFD700'
-               }}>
-                 <div style={{ color: '#6f42c1', fontWeight: 'bold', fontSize: '18px' }}>
-                   {totalLinesCleared}
-                 </div>
-                 <div style={{ color: '#D2B48C', fontSize: '12px' }}>
-                   Total Lines Cleared
-                 </div>
-               </div>
-              
-              <div style={{
-                background: 'rgba(255, 215, 0, 0.1)',
-                padding: '15px',
-                borderRadius: '8px',
-                border: '1px solid #FFD700'
-              }}>
-                <div style={{ color: '#dc3545', fontWeight: 'bold', fontSize: '18px' }}>
-                  {bestScore}
-                </div>
-                <div style={{ color: '#D2B48C', fontSize: '12px' }}>
-                  Best Score
-                </div>
-              </div>
-            </div>
-            
-            <div style={{ 
-              marginTop: '15px', 
-              textAlign: 'center', 
-              color: '#D2B48C', 
-              fontSize: '14px' 
-            }}>
-              💡 Enable "Show Game Board" to see live visualization (slower training)
-            </div>
           </div>
-        )}
+        </DndProvider>
 
         {/* AI Visualization */}
         <div className="ai-visualization-section" style={{
