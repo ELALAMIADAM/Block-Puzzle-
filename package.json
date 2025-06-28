@@ -2,7 +2,7 @@
   "name": "wood-block-puzzle",
   "version": "0.1.0",
   "private": true,
-  "homepage": "https://adamelalami.github.io/Blocks",
+  "homepage": "https://elalamiadam.github.io/Block-Puzzle-",
   "description": "A Wood Block Puzzle game built with React",
   "main": "index.js",
   "scripts": {
