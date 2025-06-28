@@ -29,6 +29,8 @@ function AILearningView({ onNavigate }) {
   const [availableBlocks, setAvailableBlocks] = useState([]);
   const [score, setScore] = useState(0);
   const [bestScore, setBestScore] = useState(0);
+  const [linesCleared, setLinesCleared] = useState(0);
+  const [totalLinesCleared, setTotalLinesCleared] = useState(0);
   const [difficulty] = useState('normal');
   
   // Training Progress
@@ -1377,64 +1379,64 @@ function AILearningView({ onNavigate }) {
                   />
                 </div>
 
-              {/* Available Blocks */}
-              <div style={{
-                background: 'rgba(139, 69, 19, 0.3)',
-                padding: '15px',
-                borderRadius: '8px',
-                border: '1px solid #8B4513',
-                height: '380px', // Increased height to eliminate scrollbar
-                display: 'flex',
-                flexDirection: 'column'
-              }}>
-                <h5 style={{ color: '#FFD700', marginBottom: '10px', margin: '0 0 10px 0' }}>Available Blocks</h5>
-                <div style={{ 
-                  flex: 1,
-                  overflow: 'hidden', // Prevent content overflow
+                {/* Available Blocks */}
+                <div style={{
+                  background: 'rgba(139, 69, 19, 0.3)',
+                  padding: '15px',
+                  borderRadius: '8px',
+                  border: '1px solid #8B4513',
+                  height: '380px', // Increased height to eliminate scrollbar
                   display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center'
+                  flexDirection: 'column'
                 }}>
-                  <BlockTray blocks={availableBlocks} disabled={true} />
+                  <h5 style={{ color: '#FFD700', marginBottom: '10px', margin: '0 0 10px 0' }}>Available Blocks</h5>
+                  <div style={{ 
+                    flex: 1,
+                    overflow: 'hidden', // Prevent content overflow
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    <BlockTray blocks={availableBlocks} disabled={true} />
+                  </div>
                 </div>
-              </div>
 
-              {/* Episode Info */}
-              <div style={{
-                background: 'rgba(139, 69, 19, 0.3)',
-                padding: '15px',
-                borderRadius: '8px',
-                border: '1px solid #8B4513'
-              }}>
-                <h5 style={{ color: '#FFD700', marginBottom: '10px' }}>Episode Info</h5>
-                <div className="episode-stats">
-                  <div className="info-item" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
-                    <span style={{ color: '#D2B48C' }}>Episode:</span>
-                    <span style={{ color: '#FFD700', fontWeight: 'bold' }}>{currentEpisode}</span>
-                  </div>
-                  <div className="info-item" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
-                    <span style={{ color: '#D2B48C' }}>Episode Score:</span>
-                    <span style={{ color: '#FFD700', fontWeight: 'bold' }}>{episodeScore}</span>
-                  </div>
-                  <div className="info-item" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
-                    <span style={{ color: '#D2B48C' }}>Total Score:</span>
-                    <span style={{ color: '#FFD700', fontWeight: 'bold' }}>{score}</span>
-                  </div>
-                  <div className="info-item" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
-                    <span style={{ color: '#D2B48C' }}>Steps:</span>
-                    <span style={{ color: '#FFD700', fontWeight: 'bold' }}>{episodeSteps}</span>
-                  </div>
-                  <div className="info-item" style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ color: '#D2B48C' }}>Algorithm:</span>
-                    <span style={{ color: '#FFD700', fontWeight: 'bold' }}>{algorithmConfigs[selectedAlgorithm].name}</span>
+                {/* Episode Info */}
+                <div style={{
+                  background: 'rgba(139, 69, 19, 0.3)',
+                  padding: '15px',
+                  borderRadius: '8px',
+                  border: '1px solid #8B4513'
+                }}>
+                  <h5 style={{ color: '#FFD700', marginBottom: '10px' }}>Episode Info</h5>
+                  <div className="episode-stats">
+                    <div className="info-item" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
+                      <span style={{ color: '#D2B48C' }}>Episode:</span>
+                      <span style={{ color: '#FFD700', fontWeight: 'bold' }}>{currentEpisode}</span>
+                    </div>
+                    <div className="info-item" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
+                      <span style={{ color: '#D2B48C' }}>Episode Score:</span>
+                      <span style={{ color: '#FFD700', fontWeight: 'bold' }}>{episodeScore}</span>
+                    </div>
+                    <div className="info-item" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
+                      <span style={{ color: '#D2B48C' }}>Total Score:</span>
+                      <span style={{ color: '#FFD700', fontWeight: 'bold' }}>{score}</span>
+                    </div>
+                    <div className="info-item" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
+                      <span style={{ color: '#D2B48C' }}>Steps:</span>
+                      <span style={{ color: '#FFD700', fontWeight: 'bold' }}>{episodeSteps}</span>
+                    </div>
+                    <div className="info-item" style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ color: '#D2B48C' }}>Algorithm:</span>
+                      <span style={{ color: '#FFD700', fontWeight: 'bold' }}>{algorithmConfigs[selectedAlgorithm].name}</span>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
-          </div>
-        </DndProvider>
+          </DndProvider>
+        )}
 
-        {/* AI Visualization */}
         <div className="ai-visualization-section" style={{
           background: 'rgba(139, 69, 19, 0.3)',
           padding: '20px',
